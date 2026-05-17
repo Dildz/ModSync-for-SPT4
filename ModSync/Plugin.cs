@@ -352,7 +352,7 @@ public class Plugin : BaseUnityPlugin
             if (Path.IsPathRooted(syncPath.path))
             {
                 Chainloader.DependencyErrors.Add(
-                    $"Could not load {Info.Metadata.Name} due to invalid sync path. Paths must be relative to SPT server root! Invalid path '{syncPath}'"
+                    $"Could not load {Info.Metadata.Name} due to invalid sync path. Paths must be relative to SPT server root! Invalid path '{syncPath.path}'"
                 );
                 yield break;
             }
@@ -360,7 +360,7 @@ public class Plugin : BaseUnityPlugin
             if (!Path.GetFullPath(syncPath.path).StartsWith(Directory.GetCurrentDirectory()))
             {
                 Chainloader.DependencyErrors.Add(
-                    $"Could not load {Info.Metadata.Name} due to invalid sync path. Paths must be within SPT server root! Invalid path '{syncPath}'"
+                    $"Could not load {Info.Metadata.Name} due to invalid sync path. Paths must be within SPT server root! Invalid path '{syncPath.path}'"
                 );
                 yield break;
             }

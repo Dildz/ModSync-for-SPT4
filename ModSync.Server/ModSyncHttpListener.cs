@@ -153,16 +153,23 @@ public class ModSyncHttpListener(
         await WriteJsonAsync(context, 200, _modVersion);
     }
 
-    /// <summary>GET /modsync/paths → list of configured syncpaths with windows-style separators.</summary>
+    /// <summary>
+    /// GET /modsync/paths → list of configured syncpaths in wire form
+    /// (game-root-relative, backslash separators).
+    /// </summary>
     private async Task HandlePathsAsync(HttpContext context)
     {
-        // Project to anonymous objects so we can rewrite `path` to backslashes
+        // Project to anonymous objects so we can rewrite paths to the wire format
         // without mutating the shared SyncPath instances (they're held by Config).
         // Anonymous types use properties, not fields, so they ignore IncludeFields —
         // serialization still produces the expected key names via the property names below.
+        //
+        // Pipeline per path: WinPath (normalize separators) → ToWirePath (translate
+        // server-cwd-relative → game-root-relative). Order matters: ToWirePath looks
+        // for `..\` or `..\` prefixes so the path needs to be backslash-normalized first.
         var winPaths = _config!.SyncPaths.ConvertAll(sp => new
         {
-            path = PathExt.WinPath(sp.path),
+            path = PathExt.ToWirePath(PathExt.WinPath(sp.path)),
             name = sp.name,
             enabled = sp.enabled,
             enforced = sp.enforced,
@@ -194,20 +201,31 @@ public class ModSyncHttpListener(
 
         if (query.ContainsKey("path"))
         {
-            // ASP.NET Core has already URL-decoded these. The client sends paths
-            // with forward slashes (it normalizes via `Replace("\\", "/")`), and
-            // our config paths can be either separator depending on what the user
-            // wrote in config.jsonc — so normalize both sides before comparing.
+            // The client sends paths in WIRE form (game-root-relative, forward-slash
+            // normalized via `Replace("\\", "/")`). Translate each config syncpath
+            // into the same wire form so we can compare like-for-like.
             var requested = new HashSet<string>(
                 query["path"].Where(s => s is not null).Select(s => PathExt.UnixPath(s!)),
                 StringComparer.Ordinal);
 
             pathsToHash = _config.SyncPaths
-                .Where(sp => sp.enforced || requested.Contains(PathExt.UnixPath(sp.path)));
+                .Where(sp => sp.enforced
+                    || requested.Contains(PathExt.UnixPath(PathExt.ToWirePath(PathExt.WinPath(sp.path)))));
         }
 
-        var hashes = await _syncUtil!.HashModFilesAsync(pathsToHash);
-        await WriteJsonAsync(context, 200, hashes);
+        // SyncUtil returns paths in server-cwd terms (e.g. `..\BepInEx\plugins\...`).
+        // Translate every outer and inner key to wire form before sending — the client
+        // resolves these relative to its own cwd (game root) and would fail otherwise.
+        var serverHashes = await _syncUtil!.HashModFilesAsync(pathsToHash);
+        var wireHashes = serverHashes.ToDictionary(
+            outer => PathExt.ToWirePath(outer.Key),
+            outer => outer.Value.ToDictionary(
+                inner => PathExt.ToWirePath(inner.Key),
+                inner => inner.Value,
+                StringComparer.Ordinal),
+            StringComparer.Ordinal);
+
+        await WriteJsonAsync(context, 200, wireHashes);
     }
 
     /// <summary>
@@ -222,7 +240,11 @@ public class ModSyncHttpListener(
     {
         // The TS used `decodeURIComponent`. C# equivalent for full URI component
         // decoding (handles %20 etc, doesn't choke on + like the older variant).
-        var filePath = Uri.UnescapeDataString(rawPath);
+        var wirePath = Uri.UnescapeDataString(rawPath);
+
+        // Client sends a wire-form path (game-root-relative); translate back to
+        // server cwd before resolving against syncpaths + the filesystem.
+        var filePath = PathExt.ToServerPath(wirePath);
 
         var sanitizedPath = SyncUtil.SanitizeDownloadPath(filePath, _config!.SyncPaths);
 
