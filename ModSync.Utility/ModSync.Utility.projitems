@@ -14,7 +14,7 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Glob.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ImoHash.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Metrohash.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)MetroHash.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ModFile.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SyncPath.cs" />
   </ItemGroup>
