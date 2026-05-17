@@ -1,0 +1,96 @@
+# Release pipeline — triggered when a git tag matching `v*` is pushed.
+#
+# Tag a commit (e.g. `git tag v0.11.1-pre1 && git push --tags`) and GitHub Actions
+# will: build the whole solution, run the unit tests, stage the binaries into the
+# layout users extract into their SPT install, zip them up, and publish a GitHub
+# Release with the zip attached. Tags containing `-pre` are marked as pre-releases.
+#
+# Naming convention: `v<major>.<minor>.<patch>` for stable, `v<...>-pre<N>` /
+# `v<...>-rc<N>` for unstable. Example: `v0.11.1-pre1`.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write  # required for softprops/action-gh-release to publish
+
+jobs:
+  release:
+    runs-on: windows-latest
+    # Windows runner because the client (ModSync) targets .NET Framework 4.7.2.
+    # Linux *can* build net472 via the Microsoft.NETFramework.ReferenceAssemblies
+    # package, but Windows is friction-free and aligns with how Dildz builds locally.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        # Reads nuget.config (which includes the BepInEx feed) and fetches every
+        # PackageReference across all projects. Cached automatically by setup-dotnet.
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+
+      - name: Run tests
+        # Targets the Tests project directly so we don't try to "test" non-test
+        # projects (which would no-op but emits warnings). --no-build is safe
+        # because the prior step already produced the test binaries.
+        run: dotnet test ModSync.Tests/ModSync.Tests.csproj -c Release --no-build --nologo
+
+      - name: Stage release artifacts
+        # Builds the directory tree users extract into their SPT install:
+        #   <game>/BepInEx/plugins/Corter-ModSync.dll        (BepInEx client plugin)
+        #   <game>/BepInEx/plugins/Corter-ModSync.dll.config (binding redirects)
+        #   <game>/SPT/user/mods/Corter-ModSync/ModSync.Server.dll (server mod)
+        #   <game>/ModSync.Updater.exe                       (standalone updater)
+        #   <game>/ModSync.Updater.*                         (.NET 9 runtime cfg + deps)
+        # User unzips into their game root and the right files end up in the right places.
+        shell: pwsh
+        run: |
+          $stage = "release-stage"
+          New-Item -ItemType Directory -Force -Path "$stage/BepInEx/plugins" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/SPT/user/mods/Corter-ModSync" | Out-Null
+
+          # Client plugin
+          Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll"        "$stage/BepInEx/plugins/"
+          Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll.config" "$stage/BepInEx/plugins/"
+
+          # Server mod
+          Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT/user/mods/Corter-ModSync/"
+
+          # Updater + its .NET 9 runtime files (framework-dependent — users need .NET 9 runtime installed)
+          $updaterOut = "ModSync.Updater/bin/Release/net9.0-windows"
+          Copy-Item "$updaterOut/ModSync.Updater.exe"               "$stage/"
+          Copy-Item "$updaterOut/ModSync.Updater.dll"               "$stage/"
+          Copy-Item "$updaterOut/ModSync.Updater.deps.json"         "$stage/"
+          Copy-Item "$updaterOut/ModSync.Updater.runtimeconfig.json" "$stage/"
+          Copy-Item "$updaterOut/Newtonsoft.Json.dll"               "$stage/"
+
+      - name: Create zip
+        shell: pwsh
+        run: |
+          $zip = "Corter-ModSync-${{ github.ref_name }}.zip"
+          Compress-Archive -Path "release-stage/*" -DestinationPath $zip -Force
+          # Log the layout so the workflow run page shows what got packaged.
+          Write-Host "=== Zip contents ==="
+          [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip)).Entries | ForEach-Object { Write-Host $_.FullName }
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "Corter-ModSync-${{ github.ref_name }}.zip"
+          # Tags containing "-pre" (e.g. v0.11.1-pre1) are marked as pre-release on
+          # GitHub — they don't show up in the "Latest" link, and users get a warning.
+          prerelease: ${{ contains(github.ref_name, '-pre') || contains(github.ref_name, '-rc') }}
+          # Auto-generate changelog from PR/commit history between this tag and the previous one.
+          generate_release_notes: true
