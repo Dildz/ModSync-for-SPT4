@@ -28,7 +28,7 @@ public record ModMetadata : AbstractModMetadata
     public override string Name { get; init; } = "Corter-ModSync";
     public override string Author { get; init; } = "Corter";
     public override List<string>? Contributors { get; init; } = ["Dildz (SPT 4.0 port)"];
-    public override Version Version { get; init; } = new("0.11.1");
+    public override Version Version { get; init; } = new("0.12.0");
 
     // Semver range — "~4.0.0" means ">=4.0.0 <4.1.0" (compatible with SPT 4.0.x).
     public override Range SptVersion { get; init; } = new("~4.0.0");
