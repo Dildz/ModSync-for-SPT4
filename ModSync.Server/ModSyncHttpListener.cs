@@ -5,6 +5,7 @@ using ModSync.Utility;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Utils;
+using SPTarkov.Server.Core.DI;
 using SPTarkov.Server.Core.Servers.Http;
 using SPTarkov.Server.Core.Utils;
 // HttpServerHelper / HttpFileUtil are both under SPTarkov.Server.Core.Utils.
@@ -29,8 +30,17 @@ namespace ModSync.Server;
 /// then, <c>CanHandle</c> returns false and the listener is invisible to clients.
 /// This mirrors NarcoNet's setter pattern; it's the cleanest workaround for
 /// "DI needs to construct me but my dependency is async/runtime-loaded."
+///
+/// **`InjectionType.Singleton` is mandatory here**, not optional. SPT's DI defaults
+/// to transient — every resolution builds a fresh instance. Without Singleton,
+/// `ModSyncMod`'s ctor gets one instance (and we call Initialize on it), but SPT's
+/// `HttpServer` constructor takes `IEnumerable&lt;IHttpListener&gt;` which triggers a
+/// SEPARATE resolution → a different instance ends up in the dispatch list, with
+/// its `_config` still null → `CanHandle` returns false → SPT logs `[UNHANDLED]`
+/// and serves 404. Singleton makes both resolutions return the same instance.
+/// NarcoNet's listener does this exact same thing.
 /// </summary>
-[Injectable]
+[Injectable(InjectionType = InjectionType.Singleton, TypePriority = OnLoadOrder.PreSptModLoader + 1)]
 public class ModSyncHttpListener(
     ISptLogger<ModSyncHttpListener> logger,
     ISptLogger<SyncUtil> syncUtilLogger,
