@@ -1,5 +1,11 @@
 # Corter's Mod Sync For SPT & Fika
 
+> [!IMPORTANT]
+> **SPT 4.0 Port.** This is a fork of [c-orter/ModSync](https://github.com/c-orter/ModSync)
+> ported from SPT 3.11 to SPT 4.0.x. Upstream's last release (v0.11.1, Mar 2025)
+> targets SPT 3.11 and has not been updated for SPT 4. All credit for the original
+> project goes to [Corter](https://github.com/c-orter). Released under WTFPL.
+
 ## About The Project
 
 This project allows clients to easily add/update/remove mods, keeping them in sync with the host when playing on a remote SPT/Fika server.
@@ -38,11 +44,11 @@ This project allows clients to easily add/update/remove mods, keeping them in sy
 
 ### Installation
 
-> The ModSync Updater (client-only) requires the 
-> [.NET 8.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/thank-you/runtime-8.0.11-windows-x64-installer).
-> If you use the launcher, you'll have it, but headless clients may need to manually install it.
+> The ModSync Updater (client-only) requires the
+> [.NET 9.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/9.0).
+> If you use the SPT launcher, you'll have it; headless clients may need to install it manually.
 
-1. Download the latest version of the mod from the [GitHub Releases](https://github.com/c-orter/modsync/releases) page
+1. Download the latest version of the mod from the [GitHub Releases](https://github.com/Dildz/ModSync-for-SPT4.0/releases) page
 2. Extract into your SPT folder like any other mod
 3. Start the server
 
@@ -53,7 +59,12 @@ This project allows clients to easily add/update/remove mods, keeping them in sy
 
 ## Configuration
 
-For information about modifying the ModSync config, see [the configuration page on the wiki](https://github.com/c-orter/ModSync/wiki/Configuration)
+For information about modifying the ModSync config, see [the configuration page on the wiki](https://github.com/c-orter/ModSync/wiki/Configuration).
+
+> [!NOTE]
+> **SPT 4 path change.** Default syncPaths now use `../BepInEx/...` (note the `../`)
+> because the SPT 4 server runs from `<gameRoot>/SPT/` rather than the game root
+> directly. The upstream wiki still shows the SPT 3 (no-prefix) format.
 
 ## Frequently Asked Questions
 
