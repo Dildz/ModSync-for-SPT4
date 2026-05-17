@@ -46,25 +46,82 @@ public record ModMetadata : AbstractModMetadata
 /// PreSptLoadAsync() during startup.
 ///
 /// `IPreSptLoadModAsync` runs BEFORE SPT itself finishes loading — important for us
-/// because we register an HTTP listener (in later phases) and want to be ready before
-/// clients can connect. Equivalent of corter's TS `IPreSptLoadMod` hook.
+/// because we register an HTTP listener and want to be ready before clients can connect.
+/// Equivalent of corter's TS `IPreSptLoadMod` hook.
 ///
 /// `TypePriority = OnLoadOrder.PreSptModLoader + 1` orders us just after the SPT mod loader
 /// has finished registering all mods. Matches the load timing of the original TS server.
 ///
-/// Primary constructor syntax — `ModSyncMod(ISptLogger&lt;ModSyncMod&gt; logger)` declares
-/// the constructor parameters inline with the class definition. The parameters are
-/// implicitly stored as private fields you can reference from any method.
+/// Primary constructor syntax — `ModSyncMod(...)` declares the constructor parameters
+/// inline with the class definition. The parameters are implicitly stored as private
+/// fields you can reference from any method.
+///
+/// **Two-stage init.** DI gives us <c>ModSyncHttpListener</c> (an <c>[Injectable]</c>
+/// in its own right) already constructed. We load config from disk, run startup
+/// checks, then call <c>listener.Initialize(config)</c> to activate it. Until that
+/// call, the listener's <c>CanHandle</c> returns false and it's invisible to clients.
 /// </summary>
 [Injectable(TypePriority = OnLoadOrder.PreSptModLoader + 1)]
-public class ModSyncMod(ISptLogger<ModSyncMod> logger) : IPreSptLoadModAsync
+public class ModSyncMod(
+    ISptLogger<ModSyncMod> logger,
+    ConfigUtil configUtil,
+    ModSyncHttpListener listener) : IPreSptLoadModAsync
 {
-    public Task PreSptLoadAsync()
+    // The two built-in files the mod author must ship in the mod folder alongside
+    // the server DLL. Paths are relative to the server's working directory; in
+    // SPT 4 the server runs from <gameRoot>/SPT/, so the updater + plugin live
+    // one directory up. Match the built-in syncpaths declared in ConfigUtil.
+    private const string UpdaterPath = "../ModSync.Updater.exe";
+    private const string PluginPath = "../BepInEx/plugins/Corter-ModSync.dll";
+
+    public async Task PreSptLoadAsync()
     {
-        // Skeleton for phase 3a — real logic (config loading, HTTP listener registration,
-        // validation that ModSync.Updater.exe and Corter-ModSync.dll exist on disk) lands
-        // in phases 3b-3d. For now we just want to confirm the mod loads.
-        logger.Info("Corter-ModSync: server mod loaded (phase 3a skeleton).");
-        return Task.CompletedTask;
+        Config config;
+
+        try
+        {
+            config = await configUtil.LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            // Mirrors corter's "load failed → log + leave listener dormant" behaviour.
+            // The listener stays uninitialized so CanHandle returns false and the
+            // /modsync/ routes 404 cleanly rather than serving partial data.
+            logger.Error($"Corter-ModSync: failed to load config — server mod is disabled.\n{ex}");
+            return;
+        }
+
+        // Validate that the files we promise to serve actually exist on disk.
+        // Non-fatal: log the error but keep the listener dormant so we don't pretend
+        // to be working. The user gets a clear "you forgot to extract X" message.
+        var allFilesPresent = true;
+
+        if (!File.Exists(UpdaterPath))
+        {
+            logger.Error(
+                $"Corter-ModSync: '{UpdaterPath}' not found. Make sure ALL files from the release zip are extracted into the SPT install.");
+            allFilesPresent = false;
+        }
+
+        if (!File.Exists(PluginPath))
+        {
+            logger.Error(
+                $"Corter-ModSync: '{PluginPath}' not found. Make sure ALL files from the release zip are extracted into the SPT install.");
+            allFilesPresent = false;
+        }
+
+        if (!allFilesPresent)
+        {
+            return;
+        }
+
+        // Hand config + version to the listener. After this returns, it starts
+        // accepting requests on /modsync/*. We pull the version from ModMetadata
+        // so the wire response always matches the declared mod version (single
+        // source of truth — change it in one place).
+        var modVersion = new ModMetadata().Version.ToString();
+        listener.Initialize(config, modVersion);
+
+        logger.Info($"Corter-ModSync: server mod loaded (v{modVersion}). Listening on /modsync/*.");
     }
 }
