@@ -15,11 +15,32 @@ using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 
 public class Server(Version pluginVersion)
 {
+    /// <summary>
+    /// Build an HttpClient that accepts SPT's self-signed TLS cert.
+    ///
+    /// SPT 4 serves HTTP over HTTPS on port 6969 with a self-signed certificate.
+    /// A bare <c>new HttpClient()</c> would reject the cert and throw on every
+    /// request. SPT's own <c>SPT.Common.Http.Client</c> works around this by
+    /// supplying an <see cref="HttpClientHandler"/> with a permissive validation
+    /// callback — but that bypass only applies to SPT's *own* HttpClient instance,
+    /// not globally. So we need to do the same on each of ours.
+    ///
+    /// This is SPT-4-specific: the SPT 3 server was plain HTTP, so the upstream
+    /// 0.11.1 client didn't need this. Lambda discards `(_, _, _, _) =&gt; true`
+    /// match SPT's own pattern — we don't care about the cert at all, the server
+    /// is on localhost (or a trusted LAN/VPS the user has explicitly configured).
+    /// </summary>
+    private static HttpClient NewHttpClient() =>
+        new HttpClient(new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
+        });
+
     private async Task<string> GetJson(string path)
     {
         try
         {
-            using var client = new HttpClient();
+            using var client = NewHttpClient();
             client.DefaultRequestHeaders.Add("modsync-version", pluginVersion.ToString());
             client.Timeout = TimeSpan.FromMinutes(5);
             var json = await client.GetStringAsync($"{RequestHandler.Host}{path}");
@@ -47,7 +68,7 @@ public class Server(Version pluginVersion)
         {
             try
             {
-                using var client = new HttpClient();
+                using var client = NewHttpClient();
                 if (retryCount > 0)
                     client.Timeout = TimeSpan.FromMinutes(10);
 
