@@ -1,91 +1,75 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    BepInEx plugin targeting .NET Framework 4.7.2 — this is what EFT/Unity's Mono runtime expects.
+    Do NOT bump to net8/net9 here; the *server* mod (ModSync.Server) uses .NET 9, but BepInEx client
+    plugins are constrained by the game's runtime.
+  -->
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <OutputType>Library</OutputType>
     <AssemblyName>Corter-ModSync</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-  </PropertyGroup>
-  <PropertyGroup>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
+
+  <!--
+    BepInEx + Harmony come from the BepInEx NuGet feed (configured in ../nuget.config).
+    This replaces corter's old HintPath refs to ..\..\..\BepInEx\core\*.dll which assumed the
+    project lived inside the SPT install at user\mods\Corter-ModSync\src\.
+  -->
   <ItemGroup>
-    <Reference Include="PhysicsModule">
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath>
-    </Reference>
-    <Reference Include="0Harmony">
-      <HintPath>..\..\..\BepInEx\core\0Harmony.dll</HintPath>
-    </Reference>
-    <Reference Include="SPT.Common">
-      <HintPath>..\..\..\BepInEx\plugins\spt\spt-common.dll</HintPath>
-    </Reference>
-    <Reference Include="SPT.Custom">
-      <HintPath>..\..\..\BepInEx\plugins\spt\spt-custom.dll</HintPath>
-    </Reference>
-    <Reference Include="SPT.Reflection">
-      <HintPath>..\..\..\BepInEx\plugins\spt\spt-reflection.dll</HintPath>
-    </Reference>
-    <Reference Include="Assembly-CSharp">
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\Assembly-CSharp.dll</HintPath>
-    </Reference>
-    <Reference Include="bsg.console.core, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\bsg.console.core.dll</HintPath>
-    </Reference>
-    <Reference Include="BepInEx">
-      <HintPath>..\..\..\BepInEx\core\BepInEx.dll</HintPath>
-    </Reference>
-    <Reference Include="Comfort">
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\Comfort.dll</HintPath>
-    </Reference>
-    <Reference Include="Comfort.Unity, Version=1.0.0.4, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\Comfort.Unity.dll</HintPath>
-    </Reference>
-    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="Sirenix.Serialization, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\Sirenix.Serialization.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Net.Http" />
-    <Reference Include="Unity.TextMeshPro, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\Unity.TextMeshPro.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine">
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\UnityEngine.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.AssetBundleModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\UnityEngine.AssetBundleModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.IMGUIModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.InputLegacyModule">
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.TextRenderingModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.UI, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\EscapeFromTarkov_Data\Managed\UnityEngine.UI.dll</HintPath>
-    </Reference>
+    <PackageReference Include="BepInEx.Core" Version="5.*" />
   </ItemGroup>
+
+  <!--
+    SPT/EFT/Unity references — all resolved from ..\References\ which is bundled in the repo.
+    See ..\References\README.md for the full source/refresh story.
+
+    Private="false" tells MSBuild "don't copy these to bin/ on build" — they're compile-time only.
+    At runtime, EFT/SPT load their own copies from the user's game install.
+  -->
+  <ItemGroup>
+    <!-- SPT modules -->
+    <Reference Include="spt-common" HintPath="..\References\spt-common.dll" Private="false" />
+    <Reference Include="spt-core" HintPath="..\References\spt-core.dll" Private="false" />
+    <Reference Include="spt-custom" HintPath="..\References\spt-custom.dll" Private="false" />
+    <Reference Include="spt-reflection" HintPath="..\References\spt-reflection.dll" Private="false" />
+
+    <!-- EFT-side game DLLs (Assembly-CSharp is hollowed — see References/README.md) -->
+    <Reference Include="Assembly-CSharp" HintPath="..\References\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="bsg.console.core" HintPath="..\References\bsg.console.core.dll" Private="false" />
+    <Reference Include="Comfort" HintPath="..\References\Comfort.dll" Private="false" />
+    <Reference Include="Comfort.Unity" HintPath="..\References\Comfort.Unity.dll" Private="false" />
+    <Reference Include="Newtonsoft.Json" HintPath="..\References\Newtonsoft.Json.dll" Private="false" />
+    <Reference Include="Sirenix.Serialization" HintPath="..\References\Sirenix.Serialization.dll" Private="false" />
+
+    <!-- Unity engine modules -->
+    <Reference Include="Unity.TextMeshPro" HintPath="..\References\Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath="..\References\UnityEngine.dll" Private="false" />
+    <Reference Include="UnityEngine.AssetBundleModule" HintPath="..\References\UnityEngine.AssetBundleModule.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="..\References\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.IMGUIModule" HintPath="..\References\UnityEngine.IMGUIModule.dll" Private="false" />
+    <Reference Include="UnityEngine.InputLegacyModule" HintPath="..\References\UnityEngine.InputLegacyModule.dll" Private="false" />
+    <Reference Include="UnityEngine.PhysicsModule" HintPath="..\References\UnityEngine.PhysicsModule.dll" Private="false" />
+    <Reference Include="UnityEngine.TextRenderingModule" HintPath="..\References\UnityEngine.TextRenderingModule.dll" Private="false" />
+    <Reference Include="UnityEngine.UI" HintPath="..\References\UnityEngine.UI.dll" Private="false" />
+
+    <!-- BCL ref — part of the .NET Framework 4.7.2 reference assemblies, no DLL needed -->
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <!-- ModSync.GUI/ contains hand-rolled IMGUI controls; pulled in as additional sources. -->
   <ItemGroup>
     <Compile Include="ModSync.GUI\*.cs" />
   </ItemGroup>
+
+  <!-- Kept from corter — these support net472 BCL features. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
   </ItemGroup>
+
+  <!-- Shared utility code (MetroHash, Glob, ImoHash, ModFile, SyncPath) lives here. -->
   <Import Project="..\ModSync.Utility\ModSync.Utility.projitems" Label="Shared" />
 </Project>
