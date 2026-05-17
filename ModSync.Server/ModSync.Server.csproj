@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SPT 4 server mods are .NET 9 class libraries that get loaded by the SPT server at startup.
+    Pattern follows server-mod-examples + lessons from NarcoNet (PrivateAssets/ExcludeAssets on
+    SPT packages so they don't get copied to the mod output dir — SPT provides them at runtime).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>ModSync.Server</RootNamespace>
+
+    <!--
+      Output layout follows the official server-mod-examples convention:
+      bin/<Config>/<ProjectName>/<AssemblyName>/   — drops a clean mod folder you can copy into
+      a real SPT install at user/mods/Corter-ModSync/ for testing.
+    -->
+    <OutputPath>bin\$(Configuration)\$(ProjectName)\$(AssemblyName)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+    <!-- Don't ship debug symbols or per-build deps.json in mod releases. -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    SPTarkov.* packages come from nuget.org. Versions pinned to 4.0.13 (matches D:\SPTarkov4.0).
+      - PrivateAssets="all"      = don't propagate this dep to projects that reference us
+      - ExcludeAssets="runtime"  = don't copy the package DLLs into our build output
+                                   (SPT loads its own copies at runtime; copying would conflict)
+  -->
+  <ItemGroup>
+    <PackageReference Include="SPTarkov.Common" Version="4.0.13">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="SPTarkov.DI" Version="4.0.13">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="SPTarkov.Server.Core" Version="4.0.13">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
+    Shared utility code (MetroHash, ImoHash, Glob, ModFile, SyncPath) — same code the
+    BepInEx client uses. This is the killer benefit of doing both sides in C#: client
+    and server compute byte-identical hashes from a single source.
+  -->
+  <Import Project="..\ModSync.Utility\ModSync.Utility.projitems" Label="Shared" />
+
+</Project>
