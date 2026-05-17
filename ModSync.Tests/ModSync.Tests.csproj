@@ -26,4 +26,30 @@
       <ProjectReference Include="..\ModSync\ModSync.csproj" />
     </ItemGroup>
 
+    <!--
+      Copy the EFT/Unity reference DLLs into the test output directory.
+
+      The ModSync client project marks these refs as `Private="false"` (compile-time
+      only — the real DLLs ship with EFT at runtime, so the mod release doesn't
+      duplicate them). That's correct for the production build, but it means when
+      ModSync.Tests runs and tries to load test fixtures that touch e.g. `Plugin.cs`,
+      .NET goes looking for `UnityEngine.dll` next to the test binary and can't find
+      it — every test that traverses Unity types fails with "Could not load file or
+      assembly 'UnityEngine'".
+
+      Fix: explicitly stage the DLLs into the test bin via the `None` item type with
+      `CopyToOutputDirectory`. `None` means "not compiled, just a file alongside the
+      project"; the `Link` attribute strips the `..\References\` prefix so the file
+      lands directly in bin/, not bin/References/.
+
+      Newtonsoft.Json is deliberately excluded — the test SDK / NUnit pipeline pulls
+      its own copy via NuGet, and shipping two side-by-side risks a binding conflict.
+    -->
+    <ItemGroup>
+      <None Include="..\References\*.dll" Exclude="..\References\Newtonsoft.Json.dll">
+        <Link>%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
 </Project>
