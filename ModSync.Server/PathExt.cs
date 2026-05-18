@@ -59,8 +59,16 @@ public static class PathExt
     /// Game-root-relative ("wire") path → server-cwd-relative path. Inverse of <see cref="ToWirePath"/>.
     ///
     /// If the wire path starts with `SPT/` or `SPT\`, strip that prefix (it's inside the
-    /// SPT subdir and the server's cwd IS that subdir). Otherwise prepend `..\` (server
+    /// SPT subdir and the server's cwd IS that subdir). Otherwise prepend `../` (server
     /// needs to go up to reach a game-root-level path).
+    ///
+    /// **Forward slash deliberately**, not backslash: this result feeds into `Path.Combine`
+    /// + `Path.GetFullPath` on the server. Windows treats both `/` and `\` as separators
+    /// so either works, but Linux (where SPT 4 servers often run in Docker) treats `\` as
+    /// a literal filename character. A backslash prefix like `..\BepInEx/...` produces a
+    /// mixed-separator string that `Path.GetFullPath` won't normalize on Linux — the
+    /// `..\` doesn't get collapsed and the request fails sanitization with a confusing
+    /// "not in any enabled sync path" error. Forward slash works on both platforms.
     ///
     /// Only the literal `SPT/` (with trailing separator) is stripped — a syncpath named
     /// `SPTfoo` won't false-match.
@@ -69,6 +77,6 @@ public static class PathExt
     {
         if (wirePath.StartsWith("SPT/", StringComparison.Ordinal)) return wirePath[4..];
         if (wirePath.StartsWith(@"SPT\", StringComparison.Ordinal)) return wirePath[4..];
-        return @"..\" + wirePath;
+        return "../" + wirePath;
     }
 }
