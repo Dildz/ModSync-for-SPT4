@@ -59,20 +59,22 @@ jobs:
 
       - name: Stage release artifacts
         # Builds the directory tree users extract into their SPT install:
-        #   <game>/BepInEx/plugins/Corter-ModSync.dll        (BepInEx client plugin)
-        #   <game>/BepInEx/plugins/Corter-ModSync.dll.config (binding redirects)
-        #   <game>/SPT/user/mods/Corter-ModSync/ModSync.Server.dll (server mod)
-        #   <game>/ModSync.Updater.exe                       (single-file updater)
+        #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll        (BepInEx client plugin)
+        #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll.config (binding redirects)
+        #   <game>/SPT/user/mods/Corter-ModSync/ModSync.Server.dll          (server mod)
+        #   <game>/ModSync.Updater.exe                                      (single-file updater)
         # User unzips into their game root and the right files end up in the right places.
+        # BepInEx scans plugins/ recursively, so the subfolder layout works seamlessly
+        # and keeps the plugins/ root cleaner.
         shell: pwsh
         run: |
           $stage = "release-stage"
-          New-Item -ItemType Directory -Force -Path "$stage/BepInEx/plugins" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/BepInEx/plugins/Corter-ModSync" | Out-Null
           New-Item -ItemType Directory -Force -Path "$stage/SPT/user/mods/Corter-ModSync" | Out-Null
 
-          # Client plugin
-          Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll"        "$stage/BepInEx/plugins/"
-          Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll.config" "$stage/BepInEx/plugins/"
+          # Client plugin (bundled into its own subfolder)
+          Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll"        "$stage/BepInEx/plugins/Corter-ModSync/"
+          Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll.config" "$stage/BepInEx/plugins/Corter-ModSync/"
 
           # Server mod
           Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT/user/mods/Corter-ModSync/"

@@ -391,6 +391,11 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         // Built-ins use ../ prefix for SPT 4 layout (server runs from <gameRoot>/SPT/).
         // `enforced=true` means the client always re-syncs these even if the user deleted them,
         // and `silent=true` hides them from the UI's "files about to update" prompt.
+        //
+        // The plugin lives inside its own subfolder (`Corter-ModSync/`) rather than as a flat
+        // DLL in `BepInEx/plugins/`. BepInEx scans recursively, so this is purely a layout
+        // tidiness choice — keeps Corter-ModSync.dll + Corter-ModSync.dll.config grouped.
+        // The syncpath points at the folder so both files get walked + hashed together.
         var builtins = new List<SyncPath>
         {
             new(
@@ -398,7 +403,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 name: "(Builtin) ModSync Updater",
                 enabled: true, enforced: true, silent: true, restartRequired: false),
             new(
-                path: "../BepInEx/plugins/Corter-ModSync.dll",
+                path: "../BepInEx/plugins/Corter-ModSync",
                 name: "(Builtin) ModSync Plugin",
                 enabled: true, enforced: true, silent: true, restartRequired: true),
         };
