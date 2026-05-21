@@ -128,16 +128,61 @@ public static class Sync
             .ToList();
     }
 
+    /// <summary>
+    /// BepInEx/plugins folder in wire form. The headless allowlist only applies
+    /// inside this folder — files in patchers/ and config/ pass through.
+    /// </summary>
+    private const string PLUGINS_FOLDER_WIRE = "BepInEx/plugins";
+
+    /// <summary>
+    /// True if a wire-form path lives inside BepInEx/plugins (i.e. is the plugins
+    /// folder itself or a descendant of it).
+    /// </summary>
+    private static bool IsInPluginsFolder(string wirePath)
+    {
+        var normalized = wirePath.Replace('\\', '/');
+        return normalized == PLUGINS_FOLDER_WIRE
+            || normalized.StartsWith(PLUGINS_FOLDER_WIRE + "/", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// True if a wire-form path is allowed by the headless allowlist — either matches
+    /// an entry exactly (file or glob), OR is a descendant of an included directory.
+    /// Mirrors the server-side <c>Config.MatchesHeadlessInclude</c>.
+    /// </summary>
+    private static bool MatchesHeadlessInclude(string wirePath, List<Regex> includeGlobs, List<string> includes)
+    {
+        var normalized = wirePath.Replace('\\', '/');
+
+        // Direct match (exact file OR any glob pattern in the allowlist)
+        if (includeGlobs.Any(g => g.IsMatch(normalized))) return true;
+
+        // Folder-include: path is under an included directory
+        foreach (var inc in includes)
+        {
+            var normalizedInc = inc.Replace('\\', '/');
+            if (normalized.StartsWith(normalizedInc + "/", StringComparison.Ordinal)) return true;
+        }
+
+        return false;
+    }
+
     public static async Task<SyncPathModFiles> HashLocalFiles(
         string basePath,
         List<SyncPath> syncPaths,
         List<Regex> remoteExclusions,
-        List<Regex> localExclusions
+        List<Regex> localExclusions,
+        List<string> headlessIncludes
     )
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var processedFiles = new HashSet<string>();
         var limitOpenFiles = new SemaphoreSlim(1024);
+
+        // Pre-compile the allowlist globs once. Empty list (player client) means no
+        // filtering happens — the predicate short-circuits via the Count == 0 check.
+        var includeGlobs = headlessIncludes.Select(Glob.Create).ToList();
+        var allowlistActive = headlessIncludes.Count > 0;
 
         var results = new SyncPathModFiles();
 
@@ -145,10 +190,26 @@ public static class Sync
         {
             var path = Path.Combine(basePath, syncPath.path);
 
+            // Find every candidate file under this syncpath. Then, when running as
+            // a headless client, drop anything inside plugins/ that the allowlist
+            // doesn't cover — mirrors the server's filter so local-vs-remote diffs stay
+            // consistent (and we don't waste cycles hashing files we'll never sync).
+            var candidates = GetFilesInDirectory(basePath, path, [.. remoteExclusions, .. syncPath.enforced ? [] : localExclusions])
+                .Where(file => !processedFiles.Contains(file));
+
+            if (allowlistActive)
+            {
+                candidates = candidates.Where(file =>
+                {
+                    var rel = file.Replace($"{basePath}\\", "");
+                    if (!IsInPluginsFolder(rel)) return true;
+                    return MatchesHeadlessInclude(rel, includeGlobs, headlessIncludes);
+                });
+            }
+
             results[syncPath.path] = (
                 await Task.WhenAll(
-                    GetFilesInDirectory(basePath, path, [.. remoteExclusions, .. syncPath.enforced ? [] : localExclusions])
-                        .Where((file) => !processedFiles.Contains(file))
+                    candidates
                         .AsParallel()
                         .Select(
                             async (file) =>
@@ -166,7 +227,7 @@ public static class Sync
         }
 
         watch.Stop();
-        Plugin.Logger.LogInfo($"Corter-ModSync: Hashed {processedFiles.Count} files in {watch.Elapsed.TotalMilliseconds}ms");
+        Plugin.Logger.LogInfo($"Corter-ModSync: Hashed {processedFiles.Count} files in {watch.Elapsed.TotalMilliseconds}ms (mode={(allowlistActive ? "headless" : "player")})");
 
         return results;
     }

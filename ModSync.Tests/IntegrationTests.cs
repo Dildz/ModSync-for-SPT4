@@ -39,8 +39,8 @@ public class IntegrationTests
 
         List<Regex> remoteExclusions = [Glob.Create("**/*.nosync"), Glob.Create("**/*.nosync.txt")];
 
-        var remoteModFiles = Sync.HashLocalFiles(remotePath, syncPaths, remoteExclusions, localExclusions).Result;
-        var localModFiles = Sync.HashLocalFiles(localPath, syncPaths, remoteExclusions, localExclusions).Result;
+        var remoteModFiles = Sync.HashLocalFiles(remotePath, syncPaths, remoteExclusions, localExclusions, []).Result;
+        var localModFiles = Sync.HashLocalFiles(localPath, syncPaths, remoteExclusions, localExclusions, []).Result;
 
         Sync.CompareModFiles(
             Path.Combine(testPath, "local"),

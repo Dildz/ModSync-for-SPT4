@@ -8,25 +8,95 @@ using SPTarkov.Server.Core.Models.Utils;
 namespace ModSync.Server;
 
 /// <summary>
-/// Processed config — what the rest of the server uses. Holds the final flattened list of
-/// SyncPaths (built-ins + user paths, sorted) and the compiled exclusion regexes.
+/// Processed config — what the rest of the server uses. Holds:
+///   • SyncPaths: built-ins + user paths, sorted (longest first so deeper matches win)
+///   • Three compiled glob lists, one per array in config.jsonc:
+///       - GlobalExclusions: universal denylist (applies to both players + headless)
+///       - ClientExclusions: player-only denylist
+///       - HeadlessIncludes: headless ALLOWLIST, scoped to BepInEx/plugins
 ///
-/// `SyncPath` here is the shared model from `ModSync.Utility` (also used by the client).
+/// `SyncPath` is the shared model from `ModSync.Utility` (also used by the client).
 /// Keeping one shape between client/server means the JSON contract is implicit, not duplicated.
 /// </summary>
-public class Config(List<SyncPath> syncPaths, List<string> exclusions)
+public class Config(
+    List<SyncPath> syncPaths,
+    List<string> globalExclusions,
+    List<string> clientExclusions,
+    List<string> headlessIncludes)
 {
+    /// <summary>
+    /// Wire-format path of the BepInEx plugins folder. The HeadlessIncludes allowlist
+    /// only filters files whose path is inside this folder — everything else (patchers,
+    /// config) flows through to headless unfiltered (besides GlobalExclusions, which
+    /// always applies).
+    /// </summary>
+    public const string PluginsFolder = "../BepInEx/plugins";
+
     public readonly List<SyncPath> SyncPaths = syncPaths;
-    public readonly List<string> Exclusions = exclusions;
+    public readonly List<string> GlobalExclusions = globalExclusions;
+    public readonly List<string> ClientExclusions = clientExclusions;
+    public readonly List<string> HeadlessIncludes = headlessIncludes;
 
-    // Compile exclusion globs once at construction — cheaper than recompiling per file check.
-    private readonly List<Regex> _globs = exclusions.ConvertAll(Glob.Create);
+    // Compile globs once at construction — cheaper than recompiling per file check.
+    // `readonly` here means the reference can't change, but the contents (regex internal
+    // state) are still mutable. C#'s equivalent of TypeScript's `readonly` array.
+    private readonly List<Regex> _globalGlobs = globalExclusions.ConvertAll(Glob.Create);
+    private readonly List<Regex> _clientGlobs = clientExclusions.ConvertAll(Glob.Create);
+    private readonly List<Regex> _headlessIncludeGlobs = headlessIncludes.ConvertAll(Glob.Create);
 
-    /// <summary>True if the given filesystem path matches any exclusion glob.</summary>
-    public bool IsExcluded(string filePath)
+    /// <summary>True if filePath matches any GlobalExclusions glob. Always applies.</summary>
+    public bool IsGloballyExcluded(string filePath)
     {
         var normalized = PathExt.UnixPath(filePath);
-        return _globs.Exists(g => g.IsMatch(normalized));
+        return _globalGlobs.Exists(g => g.IsMatch(normalized));
+    }
+
+    /// <summary>
+    /// True if filePath matches any ClientExclusions glob. Only consulted on player
+    /// (non-headless) syncs — headless clients ignore this list entirely.
+    /// </summary>
+    public bool IsClientExcluded(string filePath)
+    {
+        var normalized = PathExt.UnixPath(filePath);
+        return _clientGlobs.Exists(g => g.IsMatch(normalized));
+    }
+
+    /// <summary>
+    /// True if filePath lives inside the BepInEx/plugins folder. SyncUtil uses this
+    /// to decide whether the HeadlessIncludes allowlist applies at all — files in
+    /// patchers/ and config/ skip the include check and go straight to GlobalExclusions.
+    /// </summary>
+    public static bool IsInPluginsFolder(string filePath)
+    {
+        var normalized = PathExt.UnixPath(filePath);
+        return normalized == PluginsFolder
+            || normalized.StartsWith(PluginsFolder + "/", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// True if filePath is allowed by HeadlessIncludes — either matches an entry
+    /// exactly (file or glob), OR is a descendant of an included directory.
+    ///
+    /// The directory-descendant check appends "/" to the include before comparing,
+    /// so an include of `.../SAIN` matches `.../SAIN/SAIN.dll` but NOT `.../SAINFoo.dll`.
+    /// </summary>
+    public bool MatchesHeadlessInclude(string filePath)
+    {
+        var normalized = PathExt.UnixPath(filePath);
+
+        // Direct match (covers exact file entries AND any glob patterns in the includes list)
+        if (_headlessIncludeGlobs.Exists(g => g.IsMatch(normalized)))
+            return true;
+
+        // Folder-include: file is somewhere under an included directory
+        foreach (var inc in HeadlessIncludes)
+        {
+            var normalizedInc = PathExt.UnixPath(inc);
+            if (normalized.StartsWith(normalizedInc + "/", StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
     }
 }
 
@@ -34,14 +104,16 @@ public class Config(List<SyncPath> syncPaths, List<string> exclusions)
 /// Raw shape of the on-disk config.jsonc. Used only at parse time, then discarded —
 /// the validated/normalized output is a `Config` instance.
 ///
-/// `syncPaths` is `List&lt;JsonElement&gt;` because corter's format allows two forms:
-/// a plain string `"BepInEx/plugins"` or a full object `{ "path": "...", "enabled": false }`.
+/// `syncPaths` is `List&lt;JsonElement&gt;` because each entry can be either a plain
+/// string `"BepInEx/plugins"` or a full object `{ "path": "...", "enabled": false }`.
 /// JsonElement lets us inspect at parse time and convert either case.
 /// </summary>
 public record RawConfig
 {
     [JsonPropertyName("syncPaths")] public List<JsonElement> SyncPaths { get; init; } = [];
-    [JsonPropertyName("exclusions")] public List<string> Exclusions { get; init; } = [];
+    [JsonPropertyName("globalExclusions")] public List<string> GlobalExclusions { get; init; } = [];
+    [JsonPropertyName("clientExclusions")] public List<string> ClientExclusions { get; init; } = [];
+    [JsonPropertyName("headlessIncludes")] public List<string> HeadlessIncludes { get; init; } = [];
 }
 
 /// <summary>
@@ -54,59 +126,92 @@ public record RawConfig
 public class ConfigUtil(ISptLogger<ConfigUtil> logger)
 {
     /// <summary>
-    /// Default config written on first run.
+    /// Default config written to disk on first run. Mirrors the workspace's
+    /// `config-preview.jsonc` verbatim — keep them in sync if either changes.
     ///
-    /// Path layout note (SPT 4 vs 3): the SPT 4 server runs from `&lt;gameRoot&gt;/SPT/`, so
-    /// to reach the client-side BepInEx folder we use `../BepInEx/...`. SPT 3 ran from the
-    /// game root directly and used plain `BepInEx/...`. This is the biggest config diff
-    /// when porting from SPT 3 ModSync.
+    /// Schema (4 top-level keys):
+    ///   • syncPaths        — folders to walk. Just the 3 BepInEx folders; user/mods
+    ///                        is NOT a syncpath (server mods stay server-only).
+    ///   • globalExclusions — universal denylist (SPT internals + .nosync + .git).
+    ///   • clientExclusions — player-only denylist. Only Fika.Headless.dll is hardcoded;
+    ///                        admins add more here ONLY to reduce player-side bloat.
+    ///   • headlessIncludes — headless ALLOWLIST for BepInEx/plugins only. Patchers
+    ///                        and config flow through to headless via globalExclusions only.
+    ///
+    /// SPT 4 path note: server runs from `&lt;gameRoot&gt;/SPT/`, so `../BepInEx/...`
+    /// reaches the client-side BepInEx folder. SPT 3 used plain `BepInEx/...`.
     /// </summary>
     private const string DefaultConfig = """
         {
             // SPT 4 directory layout: server runs from <gameRoot>/SPT/.
-            //   "../BepInEx/..."  →  paths under the GAME root (client-side mods)
-            //   "user/mods/..."   →  paths under the SERVER root (server-side mods, no prefix)
+            //   "<gameRoot>/BepInEx/..."  →  client-side mods (../BepInEx/...)
+            //
+            // The `user/mods` folder is NOT a syncPath. Server mods stay server-only
+            // by design — their client-facing components ship as separate BepInEx
+            // plugins, which DO sync via the paths below.
             "syncPaths": [
                 "../BepInEx/plugins",
                 "../BepInEx/patchers",
-                "../BepInEx/config",
-                {
-                    "enabled": false,
-                    "name": "(Optional) Server mods",
-                    "path": "user/mods",
-                    "restartRequired": false
-                }
+                "../BepInEx/config"
             ],
-            "exclusions": [
-                // SPT Installer
+
+            // ─── UNIVERSAL ────────────────────────────────────────────────────────────
+
+            // Skipped for EVERY syncing client (players + headless).
+            // Use for SPT internals + universal opt-out patterns. See CONFIG.md.
+            "globalExclusions": [
+                // SPT Installer files — not "mods", they come with the SPT install
                 "../BepInEx/plugins/spt",
                 "../BepInEx/patchers/spt-prepatch.dll",
-                // Fika (per-instance state)
-                "user/mods/fika-server/types",
-                "user/mods/fika-server/cache",
-                "../BepInEx/plugins/Fika.Headless.dll",
-                // Per-mod logs / caches / per-user state
-                "../BepInEx/plugins/DanW-SPTQuestingBots/log",
-                "user/mods/SPT-Realism/ProfileBackups",
-                "user/mods/zzDrakiaXYZ-LiveFleaPrices/config",
-                "../BepInEx/plugins/kmyuhkyuk-EFTApi/cache",
-                "user/mods/ExpandedTaskText/src/**/cache.json",
-                "user/mods/leaves-loot_fuckery/output",
-                "user/mods/zz_guiltyman-addmissingquestweaponrequirements/log.log",
-                "user/mods/zz_guiltyman-addmissingquestweaponrequirements/user/logs",
-                "user/mods/acidphantasm-progressivebotsystem/logs",
-                // Corter ModSync's own patcher (older versions shipped one)
-                "../BepInEx/patchers/Corter-ModSync-Patcher.dll",
-                // Universal opt-out — any mod can drop a `.nosync` sentinel to skip a file/dir
+
+                // Universal per-file opt-out — drop a `.nosync` or `.nosync.txt` file
+                // next to any mod folder/file to skip it
                 "**/*.nosync",
                 "**/*.nosync.txt",
-                // Common dev/source-control junk under server mods
-                "user/mods/**/.git",
-                "user/mods/**/node_modules",
-                "user/mods/**/*.js",
-                "user/mods/**/*.js.map",
-                // Windows "downloaded from internet" zone marker (alternate data stream)
-                "**/*:Zone.Identifier"
+
+                // Git repo metadata — some mods are GitHub-only and may contain files
+                // that are not needed.
+                "**/.git"
+            ],
+
+            // ─── PLAYER side (denylist) ──────────────────────────────────────────────
+
+            // Skipped ONLY when a player (non-headless) client syncs.
+            // Use for HEADLESS-ONLY mods that regular players shouldn't receive.
+            // Entries here are harmless if the named mod isn't installed.
+            "clientExclusions": [
+                // Fika's own headless DLL — must never reach regular players
+                "../BepInEx/plugins/Fika/Fika.Headless.dll"
+                // There is no harm in syncing ALL BepInEx (client) mods to all players,
+                // even if you intend to use only the headless to host raids.
+                // If you'd prefer to reduce client bloat, add mod paths here that
+                // shouldn't be synced to player clients — basically a mirror of the
+                // headlessIncludes allowlist below.
+                // "../BepInEx/plugins/SAIN"                    // — bot AI
+                // "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll"  // — bot AI
+                // "../BepInEx/plugins/DrakiaXYZ-Waypoints"     // — bot pathfinding
+                // all other client (player) exclusion mod paths...
+            ],
+
+            // ─── HEADLESS side (allowlist) ───────────────────────────────────────────
+
+            // ALLOWLIST: BepInEx/plugins paths that a Fika headless client needs.
+            // Headless is a specialized instance — it only gets what's listed here,
+            // not the full plugins/ tree. This avoids shipping UI/HUD/visual mods
+            // that headless doesn't need (no human is watching its screen).
+            //
+            // SCOPE: this allowlist applies to `../BepInEx/plugins` ONLY.
+            // `../BepInEx/patchers` and `../BepInEx/config` are NOT filtered for
+            // headless — it receives the same files there as a regular player.
+            //
+            // See CONFIG.md for a starter list of common headless-needed mods.
+            "headlessIncludes": [
+                // Examples — add your own paths uncommented:
+                // "../BepInEx/plugins/Fika"                    // — Fika components (core & headless DLLs)
+                // "../BepInEx/plugins/SAIN"                    // — bot AI
+                // "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll"  // — bot AI
+                // "../BepInEx/plugins/DrakiaXYZ-Waypoints"     // — bot pathfinding
+                // all other headless only mod paths...
             ]
         }
         """;
@@ -175,8 +280,10 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
     }
 
     /// <summary>
-    /// Apply corter's validation rules. Throws on the first violation with a clear message.
-    /// Mirrors validateConfig() in config.ts so user-facing errors stay consistent.
+    /// Apply validation rules and throw on the first violation. Cross-checks against
+    /// globalExclusions only — the client/headless arrays have routing-aware semantics
+    /// where partial overlap with syncpaths is deliberate (e.g. excluding one DLL inside
+    /// an included plugins folder is a normal use case).
     /// </summary>
     private static void Validate(RawConfig raw)
     {
@@ -215,22 +322,21 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                     $"Corter-ModSync: SyncPaths must be unique. Duplicate: '{path}'");
             }
 
-            if (raw.Exclusions.Contains(path))
+            if (raw.GlobalExclusions.Contains(path))
             {
                 throw new InvalidOperationException(
-                    $"Corter-ModSync: '{path}' is in BOTH syncPaths and exclusions. This isn't doing what you want — remove from one.");
+                    $"Corter-ModSync: '{path}' is in BOTH syncPaths and globalExclusions. This isn't doing what you want — remove from one.");
             }
         }
     }
 
     /// <summary>
-    /// Convert one raw syncpath entry into a `SyncPath` instance, filling in corter's defaults
+    /// Convert one raw syncpath entry into a `SyncPath` instance, filling in defaults
     /// for any field the user didn't specify. Bare-string form gets all defaults.
     /// </summary>
     private static SyncPath BuildSyncPath(JsonElement entry)
     {
-        // Default field values from corter's TS implementation
-        // (any user-supplied object property below overrides these).
+        // Default field values (any user-supplied object property below overrides these).
         const bool defaultEnabled = true;
         const bool defaultEnforced = false;
         const bool defaultSilent = false;
@@ -305,6 +411,6 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         allPaths.AddRange(userPaths);
         allPaths.Sort((a, b) => b.path.Length.CompareTo(a.path.Length));
 
-        return new Config(allPaths, raw.Exclusions);
+        return new Config(allPaths, raw.GlobalExclusions, raw.ClientExclusions, raw.HeadlessIncludes);
     }
 }

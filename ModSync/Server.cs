@@ -101,6 +101,19 @@ public class Server(Version pluginVersion)
         }
     }
 
+    /// <summary>
+    /// Append `?headless=1` (or `&amp;headless=1` if a query string already exists) when
+    /// this client is a Fika headless instance. Server uses the flag to pick the right
+    /// filter set on /exclusions, /hashes, and /includes. /version and /paths don't
+    /// vary by client kind so they skip the flag.
+    /// </summary>
+    private static string WithHeadlessFlag(string path)
+    {
+        if (!Plugin.IsHeadless) return path;
+        var sep = path.Contains('?') ? '&' : '?';
+        return $"{path}{sep}headless=1";
+    }
+
     public async Task<string> GetModSyncVersion()
     {
         return Json.Deserialize<string>(await GetJson("/modsync/version"));
@@ -113,13 +126,24 @@ public class Server(Version pluginVersion)
 
     public async Task<List<string>> GetModSyncExclusions()
     {
-        return Json.Deserialize<List<string>>(await GetJson("/modsync/exclusions"));
+        return Json.Deserialize<List<string>>(await GetJson(WithHeadlessFlag("/modsync/exclusions")));
+    }
+
+    /// <summary>
+    /// Fetch the headless allowlist (BepInEx/plugins paths in wire form). Returns an
+    /// empty list for player clients — they don't have an allowlist concept, but the
+    /// endpoint exists so we can call it unconditionally without branching here.
+    /// </summary>
+    public async Task<List<string>> GetModSyncIncludes()
+    {
+        return Json.Deserialize<List<string>>(await GetJson(WithHeadlessFlag("/modsync/includes")));
     }
 
     public async Task<SyncPathModFiles> GetRemoteModFileHashes(List<SyncPath> syncPaths)
     {
+        var pathQuery = string.Join("&path=", syncPaths.Select(path => Uri.EscapeUriString(path.path.Replace(@"\", "/"))));
         return Json.Deserialize<SyncPathModFiles>(
-                await GetJson($"/modsync/hashes?path={string.Join("&path=", syncPaths.Select(path => Uri.EscapeUriString(path.path.Replace(@"\", "/"))))}")
+                await GetJson(WithHeadlessFlag($"/modsync/hashes?path={pathQuery}"))
             )
             .ToDictionary(
                 item => item.Key,

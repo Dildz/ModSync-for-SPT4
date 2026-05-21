@@ -33,19 +33,6 @@ public class Plugin : BaseUnityPlugin
     private static readonly string LOCAL_EXCLUSIONS_PATH = Path.Combine(MODSYNC_DIR, "Exclusions.json");
     private static readonly string UPDATER_PATH = Path.Combine(Directory.GetCurrentDirectory(), "ModSync.Updater.exe");
 
-    private static readonly List<string> HEADLESS_DEFAULT_EXCLUSIONS =
-    [
-        "BepInEx/plugins/AmandsGraphics.dll",
-        "BepInEx/plugins/AmandsSense.dll",
-        "BepInEx/plugins/Sense",
-        "BepInEx/plugins/MoreCheckmarks",
-        "BepInEx/plugins/kmyuhkyuk-EFTApi",
-        "BepInEx/plugins/DynamicMaps",
-        "BepInEx/plugins/LootValue",
-        "BepInEx/plugins/CactusPie.RamCleanerInterval.dll",
-        "BepInEx/plugins/TYR_DeClutterer.dll",
-    ];
-
     // Configuration
     private Dictionary<string, ConfigEntry<bool>> configSyncPathToggles;
     private ConfigEntry<bool> configDeleteRemovedFiles;
@@ -54,6 +41,10 @@ public class Plugin : BaseUnityPlugin
     private SyncPathModFiles remoteModFiles = [];
     private SyncPathModFiles previousSync = [];
     private List<string> localExclusions = [];
+    // Headless allowlist for BepInEx/plugins — empty for players (server returns []
+    // when no ?headless=1 flag is set). When populated, both the local walk and the
+    // remote-vs-local diff restrict plugins/ files to ones matching this list.
+    private List<string> headlessIncludes = [];
 
     private SyncPathFileList addedFiles = [];
     private SyncPathFileList updatedFiles = [];
@@ -80,7 +71,12 @@ public class Plugin : BaseUnityPlugin
                 + createdDirectories[syncPath.path].Count
             )
             .Sum();
-    private static bool IsHeadless => Chainloader.PluginInfos.ContainsKey("com.fika.headless");
+    /// <summary>
+    /// True when this BepInEx instance is loaded inside a Fika headless client. The
+    /// Server class also reads this to append `?headless=1` to relevant endpoints.
+    /// `public` (was `private`) so Server.cs can read it; otherwise unchanged.
+    /// </summary>
+    public static bool IsHeadless => Chainloader.PluginInfos.ContainsKey("com.fika.headless");
     private List<SyncPath> EnabledSyncPaths => syncPaths.Where(syncPath => configSyncPathToggles[syncPath.path].Value || syncPath.enforced).ToList();
 
     private bool SilentMode =>
@@ -411,23 +407,12 @@ public class Plugin : BaseUnityPlugin
             yield break;
         }
 
+        // Optional per-install denylist — users can hand-edit ModSync_Data/Exclusions.json
+        // to skip specific files locally on top of whatever the server filters out.
+        // We no longer auto-populate this file for headless: the server's headless
+        // allowlist (fetched via /modsync/includes below) replaces the old
+        // HEADLESS_DEFAULT_EXCLUSIONS list with a server-controlled mechanism.
         Logger.LogDebug("Loading local exclusions");
-        if (IsHeadless && !VFS.Exists(LOCAL_EXCLUSIONS_PATH))
-        {
-            try
-            {
-                VFS.WriteTextFile(LOCAL_EXCLUSIONS_PATH, Json.Serialize(HEADLESS_DEFAULT_EXCLUSIONS));
-            }
-            catch (Exception e)
-            {
-                Logger.LogError(e);
-                Chainloader.DependencyErrors.Add(
-                    $"Could not load {Info.Metadata.Name} due to error writing local exclusions file for headless client. Please check BepInEx/LogOutput.log for more information."
-                );
-                yield break;
-            }
-        }
-
         try
         {
             localExclusions = VFS.Exists(LOCAL_EXCLUSIONS_PATH) ? Json.Deserialize<List<string>>(VFS.ReadTextFile(LOCAL_EXCLUSIONS_PATH)) : [];
@@ -459,6 +444,25 @@ public class Plugin : BaseUnityPlugin
             yield break;
         }
 
+        // Headless allowlist for BepInEx/plugins. The endpoint returns [] for players,
+        // so calling it unconditionally is safe — the empty list short-circuits all
+        // downstream allowlist logic.
+        Logger.LogDebug("Fetching headless includes");
+        var includesTask = server.GetModSyncIncludes();
+        yield return new WaitUntil(() => includesTask.IsCompleted);
+        try
+        {
+            headlessIncludes = includesTask.Result;
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e);
+            Chainloader.DependencyErrors.Add(
+                $"Could not load {Info.Metadata.Name} due to error requesting headless includes. Please ensure the server mod is properly installed and try again."
+            );
+            yield break;
+        }
+
         yield return new WaitUntil(() => Singleton<CommonUI>.Instantiated);
 
         Logger.LogDebug("Hashing local files");
@@ -466,7 +470,8 @@ public class Plugin : BaseUnityPlugin
             Directory.GetCurrentDirectory(),
             EnabledSyncPaths,
             exclusions.Select(Glob.Create).ToList(),
-            localExclusions.Select(Glob.Create).ToList()
+            localExclusions.Select(Glob.Create).ToList(),
+            headlessIncludes
         );
 
         yield return new WaitUntil(() => localModFilesTask.IsCompleted);

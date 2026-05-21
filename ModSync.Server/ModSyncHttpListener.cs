@@ -28,8 +28,6 @@ namespace ModSync.Server;
 /// only available once <see cref="ModSyncMod"/>.PreSptLoadAsync runs. So we expose
 /// an <c>Initialize</c> method that ModSyncMod calls after loading config. Until
 /// then, <c>CanHandle</c> returns false and the listener is invisible to clients.
-/// This mirrors NarcoNet's setter pattern; it's the cleanest workaround for
-/// "DI needs to construct me but my dependency is async/runtime-loaded."
 ///
 /// **`InjectionType.Singleton` is mandatory here**, not optional. SPT's DI defaults
 /// to transient — every resolution builds a fresh instance. Without Singleton,
@@ -38,7 +36,11 @@ namespace ModSync.Server;
 /// SEPARATE resolution → a different instance ends up in the dispatch list, with
 /// its `_config` still null → `CanHandle` returns false → SPT logs `[UNHANDLED]`
 /// and serves 404. Singleton makes both resolutions return the same instance.
-/// NarcoNet's listener does this exact same thing.
+///
+/// **Headless routing.** Clients append `?headless=1` to /modsync/{exclusions,hashes,
+/// includes} when Fika headless is detected. The listener parses that flag and threads
+/// it through to Config + SyncUtil so the response reflects the headless-allowlist
+/// rules. Player clients omit the param and get the full denylist-only behavior.
 /// </summary>
 [Injectable(InjectionType = InjectionType.Singleton, TypePriority = OnLoadOrder.PreSptModLoader + 1)]
 public class ModSyncHttpListener(
@@ -121,6 +123,7 @@ public class ModSyncHttpListener(
                 "/modsync/version" => HandleVersionAsync(context),
                 "/modsync/paths" => HandlePathsAsync(context),
                 "/modsync/exclusions" => HandleExclusionsAsync(context),
+                "/modsync/includes" => HandleIncludesAsync(context),
                 "/modsync/hashes" => HandleHashesAsync(context),
                 _ when path.StartsWith("/modsync/fetch/", StringComparison.Ordinal)
                     => HandleFetchAsync(context, path["/modsync/fetch/".Length..]),
@@ -143,6 +146,19 @@ public class ModSyncHttpListener(
         }
     }
 
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// True if the request carries `?headless=1` in its query string. Used by the
+    /// per-route handlers to pick the right filter set. Headless clients (Fika
+    /// headless) append this flag; players omit it.
+    /// </summary>
+    private static bool IsHeadlessRequest(HttpContext context)
+    {
+        return context.Request.Query.TryGetValue("headless", out var v)
+            && v == "1";
+    }
+
     // ─── Route handlers ────────────────────────────────────────────────────────
 
     /// <summary>GET /modsync/version → JSON-encoded version string, e.g. "0.11.1".</summary>
@@ -156,6 +172,10 @@ public class ModSyncHttpListener(
     /// <summary>
     /// GET /modsync/paths → list of configured syncpaths in wire form
     /// (game-root-relative, backslash separators).
+    ///
+    /// Same syncpath list for both client kinds — there's no per-syncpath routing
+    /// in the current schema. Filtering happens inside each syncpath at the file
+    /// level (see /hashes), not at the syncpath level.
     /// </summary>
     private async Task HandlePathsAsync(HttpContext context)
     {
@@ -166,7 +186,7 @@ public class ModSyncHttpListener(
         //
         // Pipeline per path: WinPath (normalize separators) → ToWirePath (translate
         // server-cwd-relative → game-root-relative). Order matters: ToWirePath looks
-        // for `..\` or `..\` prefixes so the path needs to be backslash-normalized first.
+        // for `..\` prefixes so the path needs to be backslash-normalized first.
         var winPaths = _config!.SyncPaths.ConvertAll(sp => new
         {
             path = PathExt.ToWirePath(PathExt.WinPath(sp.path)),
@@ -180,23 +200,70 @@ public class ModSyncHttpListener(
         await WriteJsonAsync(context, 200, winPaths);
     }
 
-    /// <summary>GET /modsync/exclusions → list of exclusion glob strings.</summary>
+    /// <summary>
+    /// GET /modsync/exclusions → flat list of exclusion glob strings the client
+    /// should ignore in its local-side walk.
+    ///
+    /// Returned content depends on the client kind:
+    ///   • Player (no ?headless=1): GlobalExclusions ∪ ClientExclusions
+    ///   • Headless (?headless=1):   GlobalExclusions only — ClientExclusions
+    ///                               doesn't apply to headless, and the allowlist
+    ///                               (HeadlessIncludes) is served separately via
+    ///                               /modsync/includes.
+    /// </summary>
     private async Task HandleExclusionsAsync(HttpContext context)
     {
-        await WriteJsonAsync(context, 200, _config!.Exclusions);
+        var isHeadless = IsHeadlessRequest(context);
+
+        var effective = isHeadless
+            ? _config!.GlobalExclusions
+            : _config!.GlobalExclusions.Concat(_config.ClientExclusions).ToList();
+
+        await WriteJsonAsync(context, 200, effective);
     }
 
     /// <summary>
-    /// GET /modsync/hashes?path=X&amp;path=Y → nested dict: syncpath → file → ModFile.
+    /// GET /modsync/includes → flat list of allowlist path strings (BepInEx/plugins
+    /// paths in wire form, e.g. `BepInEx\plugins\SAIN`). Only meaningful for headless
+    /// clients; players get an empty list.
+    ///
+    /// The headless client uses this to restrict its OWN local-side walk to allowlisted
+    /// paths inside plugins/ — otherwise the local-vs-server diff would falsely flag
+    /// every non-allowlisted local file as "extra" or "removed".
+    ///
+    /// Paths are translated to wire form (`../BepInEx/plugins/SAIN` → `BepInEx\plugins\SAIN`)
+    /// for the same reason /paths translates: the client resolves these against its own
+    /// cwd (game root) and would mismatch a `../`-prefixed entry.
+    /// </summary>
+    private async Task HandleIncludesAsync(HttpContext context)
+    {
+        var isHeadless = IsHeadlessRequest(context);
+
+        // Players don't have an allowlist concept — return empty so the client can
+        // call this endpoint unconditionally without branching on its own kind.
+        IEnumerable<string> includes = isHeadless
+            ? _config!.HeadlessIncludes.ConvertAll(p => PathExt.ToWirePath(PathExt.WinPath(p)))
+            : [];
+
+        await WriteJsonAsync(context, 200, includes);
+    }
+
+    /// <summary>
+    /// GET /modsync/hashes?path=X&amp;path=Y[&amp;headless=1] → nested dict: syncpath →
+    /// file → ModFile.
     ///
     /// `path` query params are optional. If provided, only those syncpaths are
     /// hashed — except syncpaths marked `enforced=true` are always included
     /// (matches the TS behaviour: built-ins like the ModSync DLL must always
     /// be reported so the client can self-update).
+    ///
+    /// `headless=1` selects the headless filter set (see SyncUtil class doc).
+    /// Player clients omit it and get the player filter set.
     /// </summary>
     private async Task HandleHashesAsync(HttpContext context)
     {
         var query = context.Request.Query;
+        var isHeadless = IsHeadlessRequest(context);
         IEnumerable<SyncPath> pathsToHash = _config!.SyncPaths;
 
         if (query.ContainsKey("path"))
@@ -216,7 +283,7 @@ public class ModSyncHttpListener(
         // SyncUtil returns paths in server-cwd terms (e.g. `..\BepInEx\plugins\...`).
         // Translate every outer and inner key to wire form before sending — the client
         // resolves these relative to its own cwd (game root) and would fail otherwise.
-        var serverHashes = await _syncUtil!.HashModFilesAsync(pathsToHash);
+        var serverHashes = await _syncUtil!.HashModFilesAsync(pathsToHash, isHeadless);
         var wireHashes = serverHashes.ToDictionary(
             outer => PathExt.ToWirePath(outer.Key),
             outer => outer.Value.ToDictionary(
