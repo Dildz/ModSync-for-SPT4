@@ -47,13 +47,22 @@ jobs:
         # because the prior step already produced the test binaries.
         run: dotnet test ModSync.Tests/ModSync.Tests.csproj -c Release --no-build --nologo
 
+      - name: Publish Updater as single file
+        # The Updater's csproj has `PublishSingleFile=true`, but that only kicks in
+        # for `dotnet publish` (not `dotnet build`). Without this step the zip would
+        # contain 5 separate Updater files (.exe + .dll + .deps.json + .runtimeconfig.json
+        # + Newtonsoft.Json.dll). Publishing bundles them all into one ~1.6MB .exe.
+        #
+        # `--no-self-contained` keeps it framework-dependent (users have .NET 9 runtime
+        # installed), avoiding ~60MB of bundled runtime bloat.
+        run: dotnet publish ModSync.Updater/ModSync.Updater.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true --no-restore --nologo
+
       - name: Stage release artifacts
         # Builds the directory tree users extract into their SPT install:
         #   <game>/BepInEx/plugins/Corter-ModSync.dll        (BepInEx client plugin)
         #   <game>/BepInEx/plugins/Corter-ModSync.dll.config (binding redirects)
         #   <game>/SPT/user/mods/Corter-ModSync/ModSync.Server.dll (server mod)
-        #   <game>/ModSync.Updater.exe                       (standalone updater)
-        #   <game>/ModSync.Updater.*                         (.NET 9 runtime cfg + deps)
+        #   <game>/ModSync.Updater.exe                       (single-file updater)
         # User unzips into their game root and the right files end up in the right places.
         shell: pwsh
         run: |
@@ -68,13 +77,9 @@ jobs:
           # Server mod
           Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT/user/mods/Corter-ModSync/"
 
-          # Updater + its .NET 9 runtime files (framework-dependent — users need .NET 9 runtime installed)
-          $updaterOut = "ModSync.Updater/bin/Release/net9.0-windows"
-          Copy-Item "$updaterOut/ModSync.Updater.exe"               "$stage/"
-          Copy-Item "$updaterOut/ModSync.Updater.dll"               "$stage/"
-          Copy-Item "$updaterOut/ModSync.Updater.deps.json"         "$stage/"
-          Copy-Item "$updaterOut/ModSync.Updater.runtimeconfig.json" "$stage/"
-          Copy-Item "$updaterOut/Newtonsoft.Json.dll"               "$stage/"
+          # Updater — single-file output from the publish step above. Just the .exe
+          # (~1.6MB) with Newtonsoft.Json, deps.json, and runtimeconfig.json all bundled in.
+          Copy-Item "ModSync.Updater/bin/Release/net9.0-windows/win-x64/publish/ModSync.Updater.exe" "$stage/"
 
       - name: Create zip
         shell: pwsh
