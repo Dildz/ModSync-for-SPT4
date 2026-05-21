@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -176,7 +177,13 @@ public static class Sync
     )
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var processedFiles = new HashSet<string>();
+        // Thread-safe dedup set. The hashing pipeline below is `.AsParallel().Select(async ...)`,
+        // so multiple threads call `.Add()` concurrently. A plain HashSet<T> isn't thread-safe
+        // and corrupts under contention (CI on Windows hit this; local runs usually didn't).
+        // ConcurrentDictionary<TKey, byte> is the idiomatic .NET workaround — there's no
+        // built-in ConcurrentHashSet. We only care about the keys; `byte` is just a 1-byte
+        // placeholder value.
+        var processedFiles = new ConcurrentDictionary<string, byte>();
         var limitOpenFiles = new SemaphoreSlim(1024);
 
         // Pre-compile the allowlist globs once. Empty list (player client) means no
@@ -195,7 +202,7 @@ public static class Sync
             // doesn't cover — mirrors the server's filter so local-vs-remote diffs stay
             // consistent (and we don't waste cycles hashing files we'll never sync).
             var candidates = GetFilesInDirectory(basePath, path, [.. remoteExclusions, .. syncPath.enforced ? [] : localExclusions])
-                .Where(file => !processedFiles.Contains(file));
+                .Where(file => !processedFiles.ContainsKey(file));
 
             if (allowlistActive)
             {
@@ -218,7 +225,7 @@ public static class Sync
                                 var modFile = await CreateModFile(file);
                                 limitOpenFiles.Release();
 
-                                processedFiles.Add(file);
+                                processedFiles.TryAdd(file, 0);
                                 return new KeyValuePair<string, ModFile>(file.Replace($"{basePath}\\", ""), modFile);
                             }
                         )
