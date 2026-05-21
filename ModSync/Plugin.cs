@@ -193,7 +193,11 @@ public class Plugin : BaseUnityPlugin
         downloadCount = 0;
         totalDownloadCount = 0;
 
-        var limiter = new SemaphoreSlim(8);
+        // Conservative parallel-download cap. Upstream used 8; we dropped it because
+        // slow uplinks + Mono's TLS stack proved fragile under heavy concurrency
+        // (handshakes timing out, retry storms not recovering). 2 is plenty when the
+        // shared HttpClient + connection pool keep TCP/TLS sessions warm.
+        var limiter = new SemaphoreSlim(2);
         var filesToDownload = EnabledSyncPaths
             .Select((syncPath) => new KeyValuePair<string, List<string>>(syncPath.path, [.. filesToAdd[syncPath.path], .. filesToUpdate[syncPath.path]]))
             .ToDictionary((kvp) => kvp.Key, (kvp) => kvp.Value);

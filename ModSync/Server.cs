@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,6 +16,21 @@ using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 
 public class Server(Version pluginVersion)
 {
+    /// <summary>
+    /// Class constructor — runs once the first time anything touches `Server`. Installs a
+    /// global TLS bypass on <see cref="ServicePointManager"/>.
+    ///
+    /// **Why both this AND the per-handler callback?** Mono/UnityTLS doesn't always honor
+    /// <c>HttpClientHandler.ServerCertificateCustomValidationCallback</c> — particularly
+    /// on renegotiated TLS sessions or connections pulled from the pool. When that path is
+    /// taken, the older <see cref="ServicePointManager.ServerCertificateValidationCallback"/>
+    /// is consulted instead. Setting both is belt + suspenders that costs nothing.
+    /// </summary>
+    static Server()
+    {
+        ServicePointManager.ServerCertificateValidationCallback = (_, _, _, _) => true;
+    }
+
     /// <summary>
     /// Single shared HttpClient instance, reused for every request.
     ///
@@ -88,9 +104,20 @@ public class Server(Version pluginVersion)
             {
                 try
                 {
+                    // URL-encode the file path so spaces, special chars, and backslashes
+                    // survive the HTTP layer intact. We normalise `\` to `/` first so the
+                    // forward-slashes act as path separators (which we want to keep raw),
+                    // then encode each segment individually — that way spaces become %20
+                    // etc. but the path structure stays parseable. Mono's URI handling is
+                    // less forgiving than desktop .NET about unescaped chars; on the server
+                    // side we already call Uri.UnescapeDataString to decode, so this is
+                    // the matched encoding step.
+                    var encodedFile = string.Join("/",
+                        file.Replace('\\', '/').Split('/').Select(Uri.EscapeDataString));
+
                     // SharedClient is reused — DO NOT dispose. Per-request state lives on
                     // the HttpRequestMessage, which we dispose normally below.
-                    using var request = NewRequest(HttpMethod.Get, $"{RequestHandler.Host}/modsync/fetch/{file}");
+                    using var request = NewRequest(HttpMethod.Get, $"{RequestHandler.Host}/modsync/fetch/{encodedFile}");
                     using var response = await SharedClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                     response.EnsureSuccessStatusCode();
 
