@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -16,35 +16,53 @@ using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 public class Server(Version pluginVersion)
 {
     /// <summary>
-    /// Build an HttpClient that accepts SPT's self-signed TLS cert.
+    /// Single shared HttpClient instance, reused for every request.
     ///
-    /// SPT 4 serves HTTP over HTTPS on port 6969 with a self-signed certificate.
-    /// A bare <c>new HttpClient()</c> would reject the cert and throw on every
-    /// request. SPT's own <c>SPT.Common.Http.Client</c> works around this by
-    /// supplying an <see cref="HttpClientHandler"/> with a permissive validation
-    /// callback — but that bypass only applies to SPT's *own* HttpClient instance,
-    /// not globally. So we need to do the same on each of ours.
+    /// **Why static / shared.** `new HttpClient()` per call is a long-standing .NET
+    /// anti-pattern — each instance opens its own socket pool and (for HTTPS) negotiates
+    /// a fresh TLS handshake. On large syncs (1000+ files) this exhausted Mono/UnityTLS
+    /// resources mid-sync, producing `UNITYTLS_INTERNAL_ERROR` handshake failures that
+    /// not even the 5x retry loop could recover from. A single shared client lets .NET's
+    /// connection pool keep TCP+TLS sessions alive across the whole sync, dropping
+    /// handshake count from ~2000 to a handful.
     ///
-    /// This is SPT-4-specific: the SPT 3 server was plain HTTP, so the upstream
-    /// 0.11.1 client didn't need this. Lambda discards `(_, _, _, _) =&gt; true`
-    /// match SPT's own pattern — we don't care about the cert at all, the server
-    /// is on localhost (or a trusted LAN/VPS the user has explicitly configured).
+    /// **`ServerCertificateCustomValidationCallback`** bypasses SPT's self-signed cert.
+    /// SPT 4 serves over HTTPS on port 6969; SPT's own `SPT.Common.Http.Client` does
+    /// the same bypass on its private instance, but only on its own — not globally.
+    ///
+    /// **`Timeout`** is generous (10 minutes) because `/modsync/fetch` streams files of
+    /// arbitrary size; small files finish in milliseconds, huge bundles can legitimately
+    /// take minutes on slow connections. Per-request cancellation is handled separately
+    /// via the `CancellationToken` passed into `DownloadFile`.
     /// </summary>
-    private static HttpClient NewHttpClient() =>
-        new HttpClient(new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
-        });
+    private static readonly HttpClient SharedClient = new HttpClient(new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
+    })
+    {
+        Timeout = TimeSpan.FromMinutes(10),
+    };
+
+    /// <summary>
+    /// Build a GET request with the modsync-version header. Created per-call (not stored
+    /// on the shared client) because `HttpClient.DefaultRequestHeaders` is process-global,
+    /// which would race across concurrent file downloads.
+    /// </summary>
+    private HttpRequestMessage NewRequest(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        request.Headers.Add("modsync-version", pluginVersion.ToString());
+        return request;
+    }
 
     private async Task<string> GetJson(string path)
     {
         try
         {
-            using var client = NewHttpClient();
-            client.DefaultRequestHeaders.Add("modsync-version", pluginVersion.ToString());
-            client.Timeout = TimeSpan.FromMinutes(5);
-            var json = await client.GetStringAsync($"{RequestHandler.Host}{path}");
-            return json;
+            using var request = NewRequest(HttpMethod.Get, $"{RequestHandler.Host}{path}");
+            using var response = await SharedClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync();
         }
         catch (Exception e)
         {
@@ -63,41 +81,52 @@ public class Server(Version pluginVersion)
 
         var retryCount = 0;
 
-        await limiter.WaitAsync();
-        while (!cancellationToken.IsCancellationRequested)
+        await limiter.WaitAsync(cancellationToken);
+        try
         {
-            try
+            while (!cancellationToken.IsCancellationRequested)
             {
-                using var client = NewHttpClient();
-                if (retryCount > 0)
-                    client.Timeout = TimeSpan.FromMinutes(10);
-
-                using var responseStream = await client.GetStreamAsync($"{RequestHandler.Host}/modsync/fetch/{file}");
-                using var fileStream = new FileStream(downloadPath, FileMode.Create);
-
-                await responseStream.CopyToAsync(fileStream);
-
-                limiter.Release();
-                return;
-            }
-            catch (Exception e)
-            {
-                if (e is TaskCanceledException && cancellationToken.IsCancellationRequested)
-                    throw;
-
-                if (retryCount < 5)
+                try
                 {
-                    Plugin.Logger.LogError($"Failed to download '{file}'. Retrying ({retryCount + 1}/5)...");
-                    Plugin.Logger.LogDebug(e);
-                    await Task.Delay(500, cancellationToken);
-                    retryCount++;
-                    continue;
-                }
+                    // SharedClient is reused — DO NOT dispose. Per-request state lives on
+                    // the HttpRequestMessage, which we dispose normally below.
+                    using var request = NewRequest(HttpMethod.Get, $"{RequestHandler.Host}/modsync/fetch/{file}");
+                    using var response = await SharedClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    response.EnsureSuccessStatusCode();
 
-                Plugin.Logger.LogError($"Failed to download '{file}'. Exiting...");
-                Plugin.Logger.LogError(e);
-                throw;
+                    using var responseStream = await response.Content.ReadAsStreamAsync();
+                    using var fileStream = new FileStream(downloadPath, FileMode.Create);
+                    await responseStream.CopyToAsync(fileStream, 81920, cancellationToken);
+
+                    return;
+                }
+                catch (Exception e)
+                {
+                    if (e is TaskCanceledException && cancellationToken.IsCancellationRequested)
+                        throw;
+
+                    if (retryCount < 5)
+                    {
+                        Plugin.Logger.LogError($"Failed to download '{file}'. Retrying ({retryCount + 1}/5)...");
+                        Plugin.Logger.LogDebug(e);
+                        await Task.Delay(500, cancellationToken);
+                        retryCount++;
+                        continue;
+                    }
+
+                    Plugin.Logger.LogError($"Failed to download '{file}'. Exiting...");
+                    Plugin.Logger.LogError(e);
+                    throw;
+                }
             }
+        }
+        finally
+        {
+            // Always release — previously this only happened on the success path, so a
+            // 5x-retry exhaustion (which throws) leaked a slot. Cancellation hid the bug
+            // because the whole sync got torn down anyway, but doing this properly costs
+            // nothing.
+            limiter.Release();
         }
     }
 
