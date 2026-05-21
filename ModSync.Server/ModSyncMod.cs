@@ -72,7 +72,7 @@ public class ModSyncMod(
     // SPT 4 the server runs from <gameRoot>/SPT/, so the updater + plugin live
     // one directory up. Match the built-in syncpaths declared in ConfigUtil.
     private const string UpdaterPath = "../ModSync.Updater.exe";
-    private const string PluginPath = "../BepInEx/plugins/Corter-ModSync.dll";
+    private const string PluginPath = "../BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll";
 
     public async Task PreSptLoadAsync()
     {
