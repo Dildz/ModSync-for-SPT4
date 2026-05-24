@@ -467,7 +467,15 @@ public class Plugin : BaseUnityPlugin
             yield break;
         }
 
-        yield return new WaitUntil(() => Singleton<CommonUI>.Instantiated);
+        // Regular clients draw the sync windows (update/progress/restart) on top of
+        // Tarkov's main menu, so we wait until CommonUI is up before continuing.
+        // Fika.Headless skips the menu entirely (it uses PROFILE_ID to authenticate
+        // and goes straight to its WebSocket loop), so CommonUI never instantiates
+        // and this WaitUntil would yield forever. Skipping is safe because every
+        // UI call further down is already gated on !IsHeadless (SilentMode kicks
+        // in at AnalyzeModFiles, downstream windows early-exit, etc).
+        if (!IsHeadless)
+            yield return new WaitUntil(() => Singleton<CommonUI>.Instantiated);
 
         Logger.LogDebug("Hashing local files");
         var localModFilesTask = Sync.HashLocalFiles(
