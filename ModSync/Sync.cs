@@ -109,6 +109,24 @@ public static class Sync
             .ToDictionary((kvp) => kvp.Key, (kvp) => kvp.Value);
     }
 
+    /// <summary>
+    /// Strip the <paramref name="basePath"/> prefix (and its trailing separator) from
+    /// <paramref name="fullPath"/>. .NET Framework 4.7.2 has no <c>Path.GetRelativePath</c>,
+    /// so we do the strip manually. Accepts either '\' (Windows native + Wine) or '/'
+    /// (native Linux .NET) as the separator — so the function works regardless of which
+    /// form the underlying filesystem hands back.
+    /// </summary>
+    private static string StripBasePath(string basePath, string fullPath)
+    {
+        if (string.IsNullOrEmpty(basePath) || !fullPath.StartsWith(basePath, StringComparison.Ordinal))
+            return fullPath;
+
+        var idx = basePath.Length;
+        if (idx < fullPath.Length && (fullPath[idx] == '\\' || fullPath[idx] == '/'))
+            idx++;
+        return fullPath.Substring(idx);
+    }
+
     private static List<string> GetFilesInDirectory(string basePath, string directory, List<Regex> exclusions)
     {
         if (File.Exists(directory))
@@ -119,11 +137,11 @@ public static class Sync
 
         return Directory
             .GetFiles(directory, "*", SearchOption.TopDirectoryOnly)
-            .Where((file) => !IsExcluded(exclusions, file.Replace($"{basePath}\\", "")))
+            .Where((file) => !IsExcluded(exclusions, StripBasePath(basePath, file)))
             .Concat(
                 Directory
                     .GetDirectories(directory, "*", SearchOption.TopDirectoryOnly)
-                    .Where((subDir) => !IsExcluded(exclusions, subDir.Replace($"{basePath}\\", "")))
+                    .Where((subDir) => !IsExcluded(exclusions, StripBasePath(basePath, subDir)))
                     .SelectMany((subDir) => Directory.GetFileSystemEntries(subDir).Length == 0 ? [subDir] : GetFilesInDirectory(basePath, subDir, exclusions))
             )
             .ToList();
@@ -209,7 +227,7 @@ public static class Sync
             {
                 candidates = candidates.Where(file =>
                 {
-                    var rel = file.Replace($"{basePath}\\", "");
+                    var rel = StripBasePath(basePath, file);
                     if (!IsInPluginsFolder(rel)) return true;
                     return MatchesHeadlessInclude(rel, includeGlobs, headlessIncludes);
                 });
@@ -227,7 +245,7 @@ public static class Sync
                                 limitOpenFiles.Release();
 
                                 processedFiles.TryAdd(file, 0);
-                                return new KeyValuePair<string, ModFile>(file.Replace($"{basePath}\\", ""), modFile);
+                                return new KeyValuePair<string, ModFile>(StripBasePath(basePath, file), modFile);
                             }
                         )
                 )
