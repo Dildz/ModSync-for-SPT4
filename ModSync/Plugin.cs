@@ -492,7 +492,24 @@ public class Plugin : BaseUnityPlugin
         );
 
         yield return new WaitUntil(() => localModFilesTask.IsCompleted);
-        var localModFiles = localModFilesTask.Result;
+
+        // Unity coroutines swallow exceptions thrown from inside their body, including
+        // the rethrow that happens when reading `task.Result` on a faulted Task.
+        // We catch explicitly here so failures surface in the log instead of dying silently.
+        SyncPathModFiles localModFiles;
+        try
+        {
+            localModFiles = localModFilesTask.Result;
+        }
+        catch (Exception e)
+        {
+            Logger.LogError($"ModSync: HashLocalFiles threw — {e.GetType().Name}: {e.Message}");
+            Logger.LogError(e.ToString());
+            Chainloader.DependencyErrors.Add(
+                $"Could not load {Info.Metadata.Name} due to error hashing local files. Please check BepInEx/LogOutput.log."
+            );
+            yield break;
+        }
 
         VFS.WriteTextFile(LOCAL_HASHES_PATH, Json.Serialize(localModFiles));
 

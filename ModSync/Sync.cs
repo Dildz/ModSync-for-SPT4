@@ -176,6 +176,7 @@ public static class Sync
         List<string> headlessIncludes
     )
     {
+        Plugin.Logger.LogInfo($"Corter-ModSync: HashLocalFiles entered. basePath='{basePath}', syncPaths={syncPaths.Count}, headlessIncludes={headlessIncludes.Count}");
         var watch = System.Diagnostics.Stopwatch.StartNew();
         // Thread-safe dedup set. The hashing pipeline below is `.AsParallel().Select(async ...)`,
         // so multiple threads call `.Add()` concurrently. A plain HashSet<T> isn't thread-safe
