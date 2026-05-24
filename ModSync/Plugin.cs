@@ -336,6 +336,7 @@ public class Plugin : BaseUnityPlugin
         try
         {
             syncPaths = syncPathTask.Result;
+            Logger.LogInfo($"ModSync: fetched {syncPaths.Count} sync paths from server.");
         }
         catch (Exception e)
         {
@@ -438,6 +439,7 @@ public class Plugin : BaseUnityPlugin
         try
         {
             exclusions = exclusionsTask.Result;
+            Logger.LogInfo($"ModSync: fetched {exclusions.Count} exclusions from server.");
         }
         catch (Exception e)
         {
@@ -457,6 +459,7 @@ public class Plugin : BaseUnityPlugin
         try
         {
             headlessIncludes = includesTask.Result;
+            Logger.LogInfo($"ModSync: fetched {headlessIncludes.Count} headless includes from server.");
         }
         catch (Exception e)
         {
@@ -474,7 +477,9 @@ public class Plugin : BaseUnityPlugin
         // and this WaitUntil would yield forever. Skipping is safe because every
         // UI call further down is already gated on !IsHeadless (SilentMode kicks
         // in at AnalyzeModFiles, downstream windows early-exit, etc).
-        if (!IsHeadless)
+        if (IsHeadless)
+            Logger.LogInfo("ModSync: headless detected, skipping CommonUI gate.");
+        else
             yield return new WaitUntil(() => Singleton<CommonUI>.Instantiated);
 
         Logger.LogDebug("Hashing local files");
