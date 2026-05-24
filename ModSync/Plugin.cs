@@ -172,7 +172,17 @@ public class Plugin : BaseUnityPlugin
     {
         updateWindow.Hide();
 
-        if (!Directory.Exists(PENDING_UPDATES_DIR))
+        // Headless writes downloads directly to their final destinations (see the
+        // download-task creation a few lines down). The Updater pattern doesn't
+        // survive Docker's `restart: unless-stopped` — the container tears down
+        // the moment EFT exits, killing the Updater mid-copy. So no PendingUpdates
+        // dir is needed on headless; clean up any leftovers from a prior failed cycle.
+        if (IsHeadless)
+        {
+            if (Directory.Exists(PENDING_UPDATES_DIR))
+                Directory.Delete(PENDING_UPDATES_DIR, true);
+        }
+        else if (!Directory.Exists(PENDING_UPDATES_DIR))
             Directory.CreateDirectory(PENDING_UPDATES_DIR);
 
         foreach (var syncPath in EnabledSyncPaths)
@@ -207,7 +217,16 @@ public class Plugin : BaseUnityPlugin
             .SelectMany(syncPath =>
                 filesToDownload.TryGetValue(syncPath.path, out var pathFilesToDownload)
                     ? pathFilesToDownload.Select(file =>
-                        server.DownloadFile(file, syncPath.restartRequired ? PENDING_UPDATES_DIR : Directory.GetCurrentDirectory(), limiter, cts.Token)
+                        // On headless we bypass the pending dir entirely (see SyncMods header
+                        // comment). Players still stage restart-required files in the pending
+                        // dir so the Updater can apply them after the user closes EFT.
+                        server.DownloadFile(
+                            file,
+                            (!IsHeadless && syncPath.restartRequired)
+                                ? PENDING_UPDATES_DIR
+                                : Directory.GetCurrentDirectory(),
+                            limiter,
+                            cts.Token)
                     )
                     : []
             )
@@ -252,14 +271,66 @@ public class Plugin : BaseUnityPlugin
 
             if (NoRestartMode)
             {
-                Directory.Delete(PENDING_UPDATES_DIR, true);
+                if (Directory.Exists(PENDING_UPDATES_DIR))
+                    Directory.Delete(PENDING_UPDATES_DIR, true);
                 pluginFinished = true;
             }
-            else if (!IsHeadless)
-                restartWindow.Show();
+            else if (IsHeadless)
+            {
+                // Files were already downloaded directly to live destinations.
+                // Apply file-removals in-process (the Updater isn't viable here —
+                // see SyncMods header comment), then quit so the container's
+                // auto-restart loads the new mod set.
+                ApplyRemovalsInProcess();
+                Logger.LogInfo($"ModSync: headless sync complete ({UpdateCount} files). Quitting so container restart loads the new mod set.");
+                Application.Quit();
+            }
             else
-                StartUpdaterProcess();
+                restartWindow.Show();
         }
+    }
+
+    /// <summary>
+    /// Apply pending file-deletions immediately on the live filesystem and drop the
+    /// RemovedFiles.json sentinel. Called on the headless code path where there's no
+    /// Updater to do this work post-exit.
+    /// </summary>
+    private void ApplyRemovalsInProcess()
+    {
+        var basePath = Directory.GetCurrentDirectory();
+        var removed = 0;
+        foreach (var syncPath in EnabledSyncPaths)
+        {
+            // Match the rule WriteModSyncData uses: optional syncpaths only delete
+            // when the user has DeleteRemovedFiles enabled; enforced ones always do.
+            if (!(configDeleteRemovedFiles.Value || syncPath.enforced)) continue;
+
+            foreach (var rel in removedFiles[syncPath.path])
+            {
+                try
+                {
+                    var fullPath = Path.Combine(basePath, rel);
+                    if (File.Exists(fullPath))
+                    {
+                        File.Delete(fullPath);
+                        removed++;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Logger.LogWarning($"ModSync: could not remove '{rel}': {e.Message}");
+                }
+            }
+        }
+
+        // RemovedFiles.json exists only to tell the Updater what to nuke; we just
+        // did that work ourselves, so delete it. Leaving it behind would also
+        // trigger the "ModSync found previous update" warning on the next boot.
+        if (File.Exists(REMOVED_FILES_PATH))
+            File.Delete(REMOVED_FILES_PATH);
+
+        if (removed > 0)
+            Logger.LogInfo($"ModSync: removed {removed} file(s) in-process.");
     }
 
     private async Task CancelUpdatingMods()
