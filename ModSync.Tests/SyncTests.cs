@@ -497,7 +497,7 @@ public class HashLocalFilesTests
     public void TestHashLocalFiles()
     {
         var expected = fileContents.Where(kvp => !Sync.IsExcluded(exclusions, kvp.Key)).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("plugins")], exclusions, [], []).Result;
+        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("plugins")], exclusions, []).Result;
 
         Assert.That(result, Is.Not.Null);
 
@@ -513,7 +513,7 @@ public class HashLocalFilesTests
     [Test]
     public void TestHashLocalFilesWithDirectoryThatDoesNotExist()
     {
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("bad_directory")], exclusions, [], []).Result;
+        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("bad_directory")], exclusions, []).Result;
         Assert.Multiple(() =>
         {
             Assert.That(result, Is.Not.Null);
@@ -526,7 +526,7 @@ public class HashLocalFilesTests
     {
         var syncPath = Path.Combine(testDirectory, @"plugins\file1.dll");
 
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath(syncPath)], exclusions, [], []).Result;
+        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath(syncPath)], exclusions, []).Result;
 
         Assert.Multiple(() =>
         {
@@ -541,7 +541,7 @@ public class HashLocalFilesTests
     public void TestHashLocalFilesWithSingleFileThatDoesNotExist()
     {
         var syncPath = Path.Combine(testDirectory, "does_not_exist.dll");
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath(syncPath)], exclusions, [], []).Result;
+        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath(syncPath)], exclusions, []).Result;
         Assert.Multiple(() =>
         {
             Assert.That(result, Is.Not.Null);
@@ -553,7 +553,7 @@ public class HashLocalFilesTests
     public void TestHashLocalFilesEnforcedIgnoresLocalExclusions()
     {
         var expected = fileContents.Where(kvp => !Sync.IsExcluded(exclusions, kvp.Key)).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("plugins", enforced: true)], exclusions, [Glob.Create("plugins/file1.dll")], []).Result;
+        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("plugins", enforced: true)], exclusions, [Glob.Create("plugins/file1.dll")]).Result;
         Assert.That(result["plugins"].Keys, Is.EquivalentTo(expected.Keys));
     }
 }
@@ -702,200 +702,6 @@ public class IsExcludedTest
     }
 }
 
-/// <summary>
-/// Tests for the headless-routing behavior added in v0.12.0 (Phase 5b).
-///
-/// When <c>headlessIncludes</c> is non-empty, <c>HashLocalFiles</c> acts as a Fika
-/// headless client: files inside <c>BepInEx/plugins</c> must match an entry in the
-/// allowlist, while files outside <c>BepInEx/plugins</c> (patchers, config) flow
-/// through unchanged (except for the normal exclusion rules).
-///
-/// Each test builds a fake game tree on disk under a temp folder, runs
-/// <c>HashLocalFiles</c>, and asserts the resulting key set.
-/// </summary>
-[TestFixture]
-public class HashLocalFilesHeadlessTests
-{
-    // No exclusion globs needed for these tests — we want a clean baseline so we
-    // can attribute every filter decision to the headless allowlist logic.
-    private readonly List<Regex> noExclusions = [];
-
-    // Filesystem fixture. Wire-form (game-root-relative, backslash) paths because
-    // that's what Sync.HashLocalFiles produces as result keys after stripping basePath.
-    //
-    // Layout:
-    //   BepInEx/plugins/SAIN/                  ← allowlisted via folder include
-    //   BepInEx/plugins/SAINFoo/               ← name-prefix collision (must NOT match SAIN)
-    //   BepInEx/plugins/UIMod/                 ← non-allowlisted → should be filtered out
-    //   BepInEx/plugins/Fika/Fika.Core.dll     ← allowlisted via exact-file include
-    //   BepInEx/plugins/Fika/Fika.Headless.dll ← same folder, NOT exact-matched, NOT prefix
-    //   BepInEx/patchers/...                   ← outside plugins/, always flows through
-    //   BepInEx/config/...                     ← outside plugins/, always flows through
-    private readonly Dictionary<string, string> fileContents = new()
-    {
-        { @"BepInEx\plugins\SAIN\SAIN.dll", "sain main" },
-        { @"BepInEx\plugins\SAIN\Components\SubFile.dll", "sain sub" },
-        { @"BepInEx\plugins\SAINFoo\Mod.dll", "boundary check" },
-        { @"BepInEx\plugins\UIMod\UIMod.dll", "ui mod" },
-        { @"BepInEx\plugins\Fika\Fika.Core.dll", "fika core" },
-        { @"BepInEx\plugins\Fika\Fika.Headless.dll", "fika headless" },
-        { @"BepInEx\patchers\SomePatcher.dll", "patcher" },
-        { @"BepInEx\config\Some.cfg", "config" },
-    };
-
-    private string testDirectory = string.Empty;
-
-    [SetUp]
-    public void Setup()
-    {
-        testDirectory = TestUtils.GetTemporaryDirectory();
-        Directory.CreateDirectory(testDirectory);
-
-        foreach (var kvp in fileContents)
-        {
-            var filePath = Path.Combine(testDirectory, kvp.Key);
-            var fileParent = Path.GetDirectoryName(filePath);
-            if (fileParent != null && !Directory.Exists(fileParent))
-                Directory.CreateDirectory(fileParent);
-            File.WriteAllText(filePath, kvp.Value);
-        }
-    }
-
-    [TearDown]
-    public void Cleanup()
-    {
-        Directory.Delete(testDirectory, true);
-    }
-
-    /// <summary>
-    /// Player mode = empty allowlist. Nothing in BepInEx/plugins should be filtered
-    /// by the allowlist; every file under the syncpath comes through.
-    /// </summary>
-    [Test]
-    public void TestEmptyAllowlistIsPlayerMode()
-    {
-        var syncPaths = new List<SyncPath> { new(@"BepInEx\plugins") };
-        var result = Sync.HashLocalFiles(testDirectory, syncPaths, noExclusions, [], []).Result;
-
-        var keys = result[@"BepInEx\plugins"].Keys.ToList();
-
-        // Every plugins/ file in the fixture should be present (6 files).
-        Assert.That(keys, Has.Count.EqualTo(6));
-        Assert.That(keys, Does.Contain(@"BepInEx\plugins\SAIN\SAIN.dll"));
-        Assert.That(keys, Does.Contain(@"BepInEx\plugins\UIMod\UIMod.dll"));
-        Assert.That(keys, Does.Contain(@"BepInEx\plugins\Fika\Fika.Headless.dll"));
-    }
-
-    /// <summary>
-    /// Folder include: listing a directory in the allowlist includes EVERY file
-    /// beneath it. Files outside the include are filtered out.
-    /// </summary>
-    [Test]
-    public void TestFolderIncludeMatchesDescendants()
-    {
-        var syncPaths = new List<SyncPath> { new(@"BepInEx\plugins") };
-        var allowlist = new List<string> { "BepInEx/plugins/SAIN" };
-
-        var result = Sync.HashLocalFiles(testDirectory, syncPaths, noExclusions, [], allowlist).Result;
-        var keys = result[@"BepInEx\plugins"].Keys.ToList();
-
-        // Only the two files inside the SAIN folder should be present.
-        Assert.That(keys, Is.EquivalentTo(new[]
-        {
-            @"BepInEx\plugins\SAIN\SAIN.dll",
-            @"BepInEx\plugins\SAIN\Components\SubFile.dll",
-        }));
-    }
-
-    /// <summary>
-    /// Folder include `SAIN` must NOT also match the sibling `SAINFoo` (the prefix
-    /// match needs a directory-boundary "/" to avoid this exact footgun).
-    /// </summary>
-    [Test]
-    public void TestFolderIncludeRespectsDirectoryBoundary()
-    {
-        var syncPaths = new List<SyncPath> { new(@"BepInEx\plugins") };
-        var allowlist = new List<string> { "BepInEx/plugins/SAIN" };
-
-        var result = Sync.HashLocalFiles(testDirectory, syncPaths, noExclusions, [], allowlist).Result;
-        var keys = result[@"BepInEx\plugins"].Keys.ToList();
-
-        // SAINFoo content must NOT leak in just because its name starts with "SAIN".
-        Assert.That(keys, Does.Not.Contain(@"BepInEx\plugins\SAINFoo\Mod.dll"));
-    }
-
-    /// <summary>
-    /// Exact-file include: listing a specific path matches just that file.
-    /// Sibling files in the same folder are NOT pulled in.
-    /// </summary>
-    [Test]
-    public void TestExactFileIncludeMatchesOnlyThatFile()
-    {
-        var syncPaths = new List<SyncPath> { new(@"BepInEx\plugins") };
-        var allowlist = new List<string> { "BepInEx/plugins/Fika/Fika.Core.dll" };
-
-        var result = Sync.HashLocalFiles(testDirectory, syncPaths, noExclusions, [], allowlist).Result;
-        var keys = result[@"BepInEx\plugins"].Keys.ToList();
-
-        // Only the one exact file. Fika.Headless.dll lives next to it but isn't allowlisted.
-        Assert.That(keys, Is.EquivalentTo(new[]
-        {
-            @"BepInEx\plugins\Fika\Fika.Core.dll",
-        }));
-    }
-
-    /// <summary>
-    /// The allowlist only applies inside BepInEx/plugins. Files in patchers/
-    /// and config/ flow through regardless of what's in the allowlist.
-    /// </summary>
-    [Test]
-    public void TestAllowlistDoesNotFilterOutsidePluginsFolder()
-    {
-        // Walk all three BepInEx subfolders.
-        var syncPaths = new List<SyncPath>
-        {
-            new(@"BepInEx\plugins"),
-            new(@"BepInEx\patchers"),
-            new(@"BepInEx\config"),
-        };
-        // Allowlist scope is plugins/ — patchers/ and config/ should pass through unfiltered.
-        var allowlist = new List<string> { "BepInEx/plugins/Fika/Fika.Core.dll" };
-
-        var result = Sync.HashLocalFiles(testDirectory, syncPaths, noExclusions, [], allowlist).Result;
-
-        // patchers/ → patcher file present
-        Assert.That(result[@"BepInEx\patchers"].Keys, Does.Contain(@"BepInEx\patchers\SomePatcher.dll"));
-        // config/ → config file present
-        Assert.That(result[@"BepInEx\config"].Keys, Does.Contain(@"BepInEx\config\Some.cfg"));
-        // plugins/ → only the one allowlisted file
-        Assert.That(result[@"BepInEx\plugins"].Keys, Is.EquivalentTo(new[]
-        {
-            @"BepInEx\plugins\Fika\Fika.Core.dll",
-        }));
-    }
-
-    /// <summary>
-    /// Multiple includes are OR'd together — each file just needs to match ONE entry
-    /// to be included.
-    /// </summary>
-    [Test]
-    public void TestMultipleIncludesAreUnion()
-    {
-        var syncPaths = new List<SyncPath> { new(@"BepInEx\plugins") };
-        var allowlist = new List<string>
-        {
-            "BepInEx/plugins/SAIN",
-            "BepInEx/plugins/Fika/Fika.Core.dll",
-        };
-
-        var result = Sync.HashLocalFiles(testDirectory, syncPaths, noExclusions, [], allowlist).Result;
-        var keys = result[@"BepInEx\plugins"].Keys.ToList();
-
-        Assert.That(keys, Is.EquivalentTo(new[]
-        {
-            @"BepInEx\plugins\SAIN\SAIN.dll",
-            @"BepInEx\plugins\SAIN\Components\SubFile.dll",
-            @"BepInEx\plugins\Fika\Fika.Core.dll",
-        }));
-    }
-}
+// HashLocalFilesHeadlessTests (v0.12.0) removed when we reverted to upstream's 2-key
+// schema. Headless routing now lives client-side via ModSync_Data/Exclusions.json,
+// which already gets exercised through HashLocalFiles' regular localExclusions param.

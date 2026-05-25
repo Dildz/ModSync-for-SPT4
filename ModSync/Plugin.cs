@@ -33,6 +33,28 @@ public class Plugin : BaseUnityPlugin
     private static readonly string LOCAL_EXCLUSIONS_PATH = Path.Combine(MODSYNC_DIR, "Exclusions.json");
     private static readonly string UPDATER_PATH = Path.Combine(Directory.GetCurrentDirectory(), "ModSync.Updater.exe");
 
+    /// <summary>
+    /// Default contents of <c>ModSync_Data/Exclusions.json</c> when a Fika headless client
+    /// runs ModSync for the very first time. List is taken verbatim from upstream Corter
+    /// ModSync 0.11.x. After first boot, the admin is free to hand-edit Exclusions.json on
+    /// the headless instance — these are the bootstrap defaults, not a hard restriction.
+    ///
+    /// Note: most of these are SPT 3.x-era mod names that may not exist or behave the same
+    /// on SPT 4.0. Curating an SPT-4-appropriate list is tracked separately (see CONFIG.md).
+    /// </summary>
+    private static readonly List<string> HEADLESS_DEFAULT_EXCLUSIONS =
+    [
+        "BepInEx/plugins/AmandsGraphics.dll",
+        "BepInEx/plugins/AmandsSense.dll",
+        "BepInEx/plugins/Sense",
+        "BepInEx/plugins/MoreCheckmarks",
+        "BepInEx/plugins/kmyuhkyuk-EFTApi",
+        "BepInEx/plugins/DynamicMaps",
+        "BepInEx/plugins/LootValue",
+        "BepInEx/plugins/CactusPie.RamCleanerInterval.dll",
+        "BepInEx/plugins/TYR_DeClutterer.dll",
+    ];
+
     // Configuration
     private Dictionary<string, ConfigEntry<bool>> configSyncPathToggles;
     private ConfigEntry<bool> configDeleteRemovedFiles;
@@ -41,10 +63,6 @@ public class Plugin : BaseUnityPlugin
     private SyncPathModFiles remoteModFiles = [];
     private SyncPathModFiles previousSync = [];
     private List<string> localExclusions = [];
-    // Headless allowlist for BepInEx/plugins — empty for players (server returns []
-    // when no ?headless=1 flag is set). When populated, both the local walk and the
-    // remote-vs-local diff restrict plugins/ files to ones matching this list.
-    private List<string> headlessIncludes = [];
 
     private SyncPathFileList addedFiles = [];
     private SyncPathFileList updatedFiles = [];
@@ -414,10 +432,28 @@ public class Plugin : BaseUnityPlugin
 
         // Optional per-install denylist — users can hand-edit ModSync_Data/Exclusions.json
         // to skip specific files locally on top of whatever the server filters out.
-        // We no longer auto-populate this file for headless: the server's headless
-        // allowlist (fetched via /modsync/includes below) replaces the old
-        // HEADLESS_DEFAULT_EXCLUSIONS list with a server-controlled mechanism.
+        //
+        // Headless bootstrap: when a Fika headless client runs ModSync for the first time
+        // and there's no Exclusions.json yet, seed it with HEADLESS_DEFAULT_EXCLUSIONS so
+        // the headless skips UI/graphics mods that don't make sense without a display.
+        // Subsequent boots read whatever's on disk — admin can curate it freely.
         Logger.LogDebug("Loading local exclusions");
+        if (IsHeadless && !VFS.Exists(LOCAL_EXCLUSIONS_PATH))
+        {
+            try
+            {
+                VFS.WriteTextFile(LOCAL_EXCLUSIONS_PATH, Json.Serialize(HEADLESS_DEFAULT_EXCLUSIONS));
+            }
+            catch (Exception e)
+            {
+                Logger.LogError(e);
+                Chainloader.DependencyErrors.Add(
+                    $"Could not load {Info.Metadata.Name} due to error writing local exclusions file for headless client. Please check BepInEx/LogOutput.log for more information."
+                );
+                yield break;
+            }
+        }
+
         try
         {
             localExclusions = VFS.Exists(LOCAL_EXCLUSIONS_PATH) ? Json.Deserialize<List<string>>(VFS.ReadTextFile(LOCAL_EXCLUSIONS_PATH)) : [];
@@ -450,26 +486,6 @@ public class Plugin : BaseUnityPlugin
             yield break;
         }
 
-        // Headless allowlist for BepInEx/plugins. The endpoint returns [] for players,
-        // so calling it unconditionally is safe — the empty list short-circuits all
-        // downstream allowlist logic.
-        Logger.LogDebug("Fetching headless includes");
-        var includesTask = server.GetModSyncIncludes();
-        yield return new WaitUntil(() => includesTask.IsCompleted);
-        try
-        {
-            headlessIncludes = includesTask.Result;
-            Logger.LogInfo($"ModSync: fetched {headlessIncludes.Count} headless includes from server.");
-        }
-        catch (Exception e)
-        {
-            Logger.LogError(e);
-            Chainloader.DependencyErrors.Add(
-                $"Could not load {Info.Metadata.Name} due to error requesting headless includes. Please ensure the server mod is properly installed and try again."
-            );
-            yield break;
-        }
-
         // Regular clients draw the sync windows (update/progress/restart) on top of
         // Tarkov's main menu, so we wait until CommonUI is up before continuing.
         // Fika.Headless skips the menu entirely (it uses PROFILE_ID to authenticate
@@ -487,8 +503,7 @@ public class Plugin : BaseUnityPlugin
             Directory.GetCurrentDirectory(),
             EnabledSyncPaths,
             exclusions.Select(Glob.Create).ToList(),
-            localExclusions.Select(Glob.Create).ToList(),
-            headlessIncludes
+            localExclusions.Select(Glob.Create).ToList()
         );
 
         yield return new WaitUntil(() => localModFilesTask.IsCompleted);
