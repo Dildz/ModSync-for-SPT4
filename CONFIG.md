@@ -1,31 +1,32 @@
 # Corter-ModSync — Configuration Guide (SPT 4.0.x)
 
-This document explains how to set up `config.jsonc` for an SPT 4 server, plus a
-starter mod-routing list you can paste in for a typical Fika headless setup.
+ModSync has two configuration surfaces:
 
-The on-disk config lives at `SPT/user/mods/Corter-ModSync/config.jsonc` and is
-written with defaults the first time the server starts.
+1. **Server** `config.jsonc` — what the server walks, what to never sync,
+   and what reaches a Fika headless install.
+2. **Each install's** `<game>/ModSync_Data/Exclusions.jsonc` — personal
+   per-install opt-outs (player or headless).
+
+Both files are created on first run with sensible defaults and a comment
+header you can hand-edit without consulting docs.
 
 ---
 
-## Schema at a glance
+## Server config (`config.jsonc`)
+
+Lives at `SPT/user/mods/Corter-ModSync/config.jsonc`. Three top-level keys:
 
 ```jsonc
 {
-    "syncPaths":        [ ... ],   // folders to walk
-    "globalExclusions": [ ... ],   // universal denylist
-    "clientExclusions": [ ... ],   // player-only denylist
-    "headlessIncludes": [ ... ]    // headless-only allowlist (BepInEx/plugins scope)
+    "syncPaths":        [ ... ],   // folders to walk and serve
+    "exclusions":       [ ... ],   // universal denylist (every client)
+    "headlessIncludes": [ ... ]    // allowlist for Fika headless (plugins-scoped)
 }
 ```
 
-Four top-level keys, that's it. Each is explained below.
+### `syncPaths`
 
----
-
-## `syncPaths`
-
-The folders ModSync walks and serves to clients. Just the three BepInEx folders:
+The folders ModSync walks and serves. Just the three BepInEx folders:
 
 ```jsonc
 "syncPaths": [
@@ -36,205 +37,213 @@ The folders ModSync walks and serves to clients. Just the three BepInEx folders:
 ```
 
 > **Why no `user/mods/`?** Server-side mods stay on the server. Their
-> client-facing components ship as separate BepInEx plugins which DO sync via
-> the three folders above.
+> client-facing components ship as separate BepInEx plugins, which DO sync
+> via the three folders above.
 
 > **Why `../`?** SPT 4 starts its server from `<game>/SPT/`. To reach the
-> game-root `BepInEx/` folder, the server needs to go up one level. SPT 3 used
-> plain `BepInEx/...` because the server ran at the game root.
+> game-root `BepInEx/` folder, the server goes up one level. SPT 3 used plain
+> `BepInEx/...` because the server ran at the game root.
 
-Entries can be plain strings or objects if you need to override defaults:
+Entries can be plain strings or objects when you need to override defaults:
 
 ```jsonc
 {
     "path": "../BepInEx/plugins",
     "name": "BepInEx Plugins",   // display name in the client UI
     "enabled": true,             // false = client skips this folder entirely
-    "enforced": false,           // true = client can't opt out
+    "enforced": false,           // true = client can't opt out of this folder
     "silent": false,             // true = no UI prompt before syncing
     "restartRequired": true      // true = client restart needed after update
 }
 ```
 
-The string form `"../BepInEx/plugins"` is shorthand for an object with all
-defaults. Object form gives you the knobs.
+The string form is shorthand for an object with all defaults.
 
----
+### `exclusions`
 
-## `globalExclusions`
+Universal denylist — applied to **every** client, player and headless alike.
+For SPT internals, files that should never be synced, and the universal
+`.nosync` sentinel pattern.
 
-Skipped for **every** sync, regardless of client kind. Use for SPT internals
-and universal opt-out patterns.
+Default contents (written on first run):
 
 ```jsonc
-"globalExclusions": [
-    "../BepInEx/plugins/spt",            // SPT installer DLLs, not "mods"
+"exclusions": [
+    "../BepInEx/plugins/spt",              // SPT installer DLLs
     "../BepInEx/patchers/spt-prepatch.dll",
-    "**/*.nosync",                       // per-file opt-out
+    "../BepInEx/plugins/Fika/Fika.Headless.dll",  // never give players the headless DLL
+    "**/*.nosync",                         // per-file/folder opt-out sentinel
     "**/*.nosync.txt",
-    "**/.git"                            // git-cloned mod metadata
+    "**/.git"                              // git-cloned mod metadata
 ]
 ```
 
-**The `.nosync` mechanism**: drop an empty `.nosync` file (or `.nosync.txt`)
-next to any mod file or folder to exclude it from sync without editing this
-file. Handy for per-machine state files some mods write into their own folder.
+**The `.nosync` sentinel**: drop an empty `.nosync` or `.nosync.txt` file
+inside any mod folder to exclude that mod from sync without editing this
+file. Handy for mods that write per-machine state into their own folder.
 
----
+### `headlessIncludes`
 
-## `clientExclusions`
+**Allowlist** scoped to `../BepInEx/plugins` only. A Fika headless client
+gets ONLY the plugin paths matching an entry here. Outside of `plugins/`
+(patchers, config) headless gets the same files a player would, filtered
+only by the universal `exclusions` above.
 
-Skipped only when a **regular player** client syncs. Headless clients ignore
-this list.
+**Empty array is the default — and means headless gets ZERO plugins.**
+If you run a headless instance, you MUST populate this list.
 
-**Default:**
-```jsonc
-"clientExclusions": [
-    "../BepInEx/plugins/Fika/Fika.Headless.dll"
-]
-```
-
-> **Most setups leave this at the default.** There's no harm in syncing every
-> BepInEx mod to all players — even mods that headless also uses. If a player
-> ever wants to host their own raid (instead of having headless host), they'll
-> need all the same plugins headless needs (bot AI, pathfinding, etc.).
->
-> The only case where you'd add entries here: a strict "headless is the only
-> raid host" setup where you want to keep player installs lean. Then you'd add
-> mods like `SAIN`, `DrakiaXYZ-BigBrain.dll`, `DrakiaXYZ-Waypoints` to keep
-> them off players. Be aware: doing this commits players to never hosting.
-
----
-
-## `headlessIncludes`
-
-**Allowlist** for `BepInEx/plugins`. A Fika headless client gets ONLY the paths
-listed here from `plugins/` — nothing else. Outside of `plugins/`, headless
-gets the same files a player would (patchers and config are not filtered by
-this allowlist).
-
-```jsonc
-"headlessIncludes": [
-    "../BepInEx/plugins/Fika",
-    "../BepInEx/plugins/SAIN",
-    "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll",
-    "../BepInEx/plugins/DrakiaXYZ-Waypoints",
-    "../BepInEx/plugins/QuestingBots"
-]
-```
-
-Each entry can be:
-- **A folder** (`../BepInEx/plugins/SAIN`) — matches that folder and every file
+Entries can be:
+- **A folder**: `../BepInEx/plugins/SAIN` matches the folder and everything
   inside it. Directory boundary check applies: `SAIN` does NOT match `SAINFoo`.
-- **An exact file** (`../BepInEx/plugins/Fika/Fika.Headless.dll`) — matches
-  just that one file. Sibling files in the same folder are NOT pulled in.
+- **An exact file**: `../BepInEx/plugins/Fika/Fika.Headless.dll` matches just
+  that one file. Sibling files in the same folder are NOT pulled in.
+- **A glob**: `../BepInEx/plugins/*.dll` matches whatever the glob matches.
 
-> **Why an allowlist (not a denylist) for headless?** Headless is a
-> specialized instance with no human at the keyboard. Most UI/HUD/visual mods
-> would either crash it or just waste disk space. The Fika project documents
-> that some mods actively break a headless instance, so the safer default is
-> "give it nothing, list what's needed."
+> **Why an allowlist (not a denylist) for headless?** Headless has no human
+> at the keyboard — most UI/HUD/visual mods would crash it or waste disk.
+> An allowlist is much shorter than its denylist equivalent (~20 entries vs.
+> hundreds of cosmetic mods), and you only have to update it when *headless's*
+> mod set changes, not when the player ecosystem moves.
 
 ---
 
-## "Where does my mod go?" heuristics
+## Per-install config (`ModSync_Data/Exclusions.jsonc`)
 
-1. **Is it a server-only mod** (lives in `user/mods/`, no BepInEx component)?
-   → Don't list it anywhere. ModSync never syncs `user/mods/`.
+Lives at `<game>/ModSync_Data/Exclusions.jsonc` on each install. Created on
+first run with an empty array and a comment header explaining the format.
 
-2. **Is it a BepInEx mod the headless needs to run raids properly**
-   (bot AI, pathfinding, networking, server-driven gameplay)?
-   → Add to `headlessIncludes`.
+**One-line mental model:** *"files I don't want ModSync to install or keep
+installed on this machine."*
 
-3. **Is it a BepInEx mod that's purely client-facing**
-   (HUD, UI overlays, visual effects, item info, hotkeys)?
-   → Don't list it anywhere — players get it by default, headless skips it
+### Behavior
+
+For each path or glob you list:
+
+| How the file got onto this install | What happens on next sync |
+| --- | --- |
+| ModSync installed it on a previous sync | **Deleted** locally |
+| You never had it | Stays absent — not downloaded |
+| You copied it in by hand (ModSync never installed it) | **Stays** — ModSync only touches files it installed |
+
+Translation: this is an **uninstall + don't-reinstall** list, not a "freeze
+locally" list. Add something you currently have, and ModSync will remove it
+on the next sync (assuming ModSync had installed it in the first place).
+
+### Player vs headless usage
+
+- **Player install:** use this for personal opt-outs — visual mods you don't
+  want, hotkey mods that conflict with yours, etc. Typically just a handful
+  of entries per player.
+- **Headless install:** **usually empty.** The server's `headlessIncludes`
+  allowlist already controls what reaches headless. Use this file only for
+  per-headless overrides on top of the allowlist (rare).
+
+### Edits aren't live
+
+`Exclusions.jsonc` is read once at game startup. Mid-game edits do nothing
+until you restart EFT.
+
+### Format
+
+```jsonc
+// Examples — uncomment / edit as needed
+[
+    "BepInEx/plugins/AmandsGraphics.dll",
+    "BepInEx/plugins/DynamicMaps/**",
+    "BepInEx/config/com.author.somemod.cfg"
+]
+```
+
+Entries can be:
+- **An exact file path** — `BepInEx/plugins/SomeMod.dll`
+- **A folder path** — `BepInEx/plugins/DynamicMaps` matches the folder and
+  everything inside it
+- **A glob** — `BepInEx/plugins/DynamicMaps/**`, `BepInEx/config/*.cfg`
+
+Paths are written game-root-relative with forward slashes.
+
+### Safety hatches
+
+- **`enforced` syncpaths bypass local exclusions.** If the admin marked a
+  syncpath as `enforced: true`, the client can't opt out of files inside
+  it. This keeps `Corter-ModSync.dll` itself uninstall-proof.
+- **Manually-installed files are immune.** ModSync only deletes files it
+  recognises from a previous sync (tracked in `ModSync_Data/PreviousSync.json`).
+  If you hand-dropped a file into BepInEx, ModSync won't touch it.
+- **The "X files to remove" confirm appears before anything deletes.** If a
+  bad glob is about to delete 20 things, click Cancel and fix the glob.
+
+---
+
+## Setting up a Fika headless install
+
+1. **On the server**, populate `headlessIncludes` in `config.jsonc` with the
+   plugins your headless needs. Starter list for a typical bot-focused
+   headless (adjust to your mod set):
+
+   ```jsonc
+   "headlessIncludes": [
+       // Fika components — Fika.Core for protocol, Fika.Headless for host
+       "../BepInEx/plugins/Fika",
+
+       // Bot AI + behavior
+       "../BepInEx/plugins/SAIN",
+       "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll",
+       "../BepInEx/plugins/DrakiaXYZ-Waypoints",
+       "../BepInEx/plugins/QuestingBots",
+       "../BepInEx/plugins/MoreBotsAPI",
+
+       // Bot-affecting gameplay
+       "../BepInEx/plugins/DontShootTheBus.dll",
+       "../BepInEx/plugins/NerfBotGrenades.dll",
+       "../BepInEx/plugins/Shibdib.SniperBros.dll",
+       "../BepInEx/plugins/skwizzy.LootingBots.dll",
+
+       // Networking / patcher dependencies
+       "../BepInEx/plugins/Tyfon.UIFixes.dll",
+       "../BepInEx/plugins/Tyfon.UIFixes.Net.dll",
+       "../BepInEx/plugins/UnityToolkit",
+
+       // WTT shared content + cosmetics worn in-raid (visible to clients)
+       "../BepInEx/plugins/7Bpencil.WeaponCamoAndStickers",
+       "../BepInEx/plugins/BlackDiv",
+       "../BepInEx/plugins/WTT-ArmoryClient",
+       "../BepInEx/plugins/WTT-ClientCommonLib",
+       "../BepInEx/plugins/WTT-ContentBackportClient",
+       "../BepInEx/plugins/WTT-PackNStrap"
+   ]
+   ```
+
+2. **On the headless install** — nothing to configure. It detects
+   `Fika.Headless.dll` at startup, sends `?headless=1` to the server, and
+   gets only the allowlisted plugins back. `Exclusions.jsonc` stays at its
+   empty default.
+
+When in doubt about whether a particular mod is safe on headless, check the
+[Fika wiki's Headless section](https://github.com/project-fika/Wiki) or ask
+in the Fika Discord.
+
+---
+
+## "Where does my mod go?" decision tree
+
+1. **Server-only mod** (lives in `user/mods/`, no BepInEx component)?
+   → Don't list anywhere. ModSync never syncs `user/mods/`.
+
+2. **BepInEx mod the headless needs to run raids properly** (bot AI,
+   pathfinding, networking, server-driven gameplay)?
+   → Add to `headlessIncludes` on the server.
+
+3. **BepInEx mod that's purely client-facing** (HUD, UI overlays, visual
+   effects, item info, hotkeys)?
+   → Don't list anywhere — players get it by default, headless skips it
    because it's not in `headlessIncludes`.
 
-4. **Is it `Fika.Headless.dll`**?
-   → Already in `clientExclusions` by default. Don't add anywhere else.
+4. **A particular player doesn't want a particular mod?**
+   → That player adds it to their own `Exclusions.jsonc`.
 
-5. **Lean-player-install setup** (rare): players never host raids, you want
-   smaller player installs?
-   → Mirror the parts of `headlessIncludes` that players don't need into
-   `clientExclusions`. Most setups DON'T need this.
-
----
-
-## Starter `config.jsonc` for a Fika headless setup
-
-Paste this in and trim to taste. Mod names are based on a real-world install;
-yours will differ.
-
-```jsonc
-{
-    "syncPaths": [
-        "../BepInEx/plugins",
-        "../BepInEx/patchers",
-        "../BepInEx/config"
-    ],
-
-    "globalExclusions": [
-        "../BepInEx/plugins/spt",
-        "../BepInEx/patchers/spt-prepatch.dll",
-        "**/*.nosync",
-        "**/*.nosync.txt",
-        "**/.git"
-    ],
-
-    // Most setups leave this at just Fika.Headless.dll. See CONFIG.md for the
-    // rare "lean player install" pattern.
-    "clientExclusions": [
-        "../BepInEx/plugins/Fika/Fika.Headless.dll"
-    ],
-
-    // Headless allowlist. Adjust to match the bot-AI / networking / patcher
-    // mods you actually run.
-    "headlessIncludes": [
-        // Fika components — Fika.Core for the protocol, Fika.Headless for the host
-        "../BepInEx/plugins/Fika",
-
-        // Bot AI + behavior
-        "../BepInEx/plugins/SAIN",
-        "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll",
-        "../BepInEx/plugins/DrakiaXYZ-Waypoints",
-        "../BepInEx/plugins/QuestingBots",
-        "../BepInEx/plugins/MoreBotsAPI",
-
-        // Bot-affecting gameplay
-        "../BepInEx/plugins/DontShootTheBus.dll",
-        "../BepInEx/plugins/NerfBotGrenades.dll",
-        "../BepInEx/plugins/Shibdib.SniperBros.dll",
-        "../BepInEx/plugins/skwizzy.LootingBots.dll",
-
-        // Misc that headless runs alongside bots
-        "../BepInEx/plugins/RUAFComeHome",
-        "../BepInEx/plugins/tacticaltoaster-untargohome",
-        "../BepInEx/plugins/SamSWAT.HeliCrash.ArysReloaded",
-        "../BepInEx/plugins/Terkoiz.FlareEventNotifier.dll",
-        "../BepInEx/plugins/MergeConsumables",
-
-        // Networking / patcher dependencies
-        "../BepInEx/plugins/Tyfon.UIFixes.dll",
-        "../BepInEx/plugins/Tyfon.UIFixes.Net.dll",
-        "../BepInEx/plugins/UnityToolkit",
-        "../BepInEx/plugins/s8_SPT_LoadBundleEvenFaster",
-        "../BepInEx/plugins/s8_SPT_PatchCRC32",
-        "../BepInEx/plugins/UseItemsFromAnywhere.dll",
-
-        // WTT shared content + cosmetics worn in-raid (visible to clients)
-        "../BepInEx/plugins/7Bpencil.WeaponCamoAndStickers",
-        "../BepInEx/plugins/acidphantasm-armbandsforall",
-        "../BepInEx/plugins/acidphantasm-botplacementsystem",
-        "../BepInEx/plugins/acidphantasm-temporaryfixes",
-        "../BepInEx/plugins/BlackDiv",
-        "../BepInEx/plugins/WTT-ArmoryClient",
-        "../BepInEx/plugins/WTT-ClientCommonLib",
-        "../BepInEx/plugins/WTT-ContentBackportClient",
-        "../BepInEx/plugins/WTT-PackNStrap"
-    ]
-}
-```
+5. **`Fika.Headless.dll`** → already in `exclusions` by default. Don't add
+   anywhere else.
 
 ---
 
@@ -243,9 +252,6 @@ yours will differ.
 Fika is the multiplayer layer ModSync is designed to coexist with.
 
 - **Wiki:** https://github.com/project-fika/Wiki
-- **Headless documentation:** see the Wiki's "Headless" section for the canonical
+- **Headless docs:** see the Wiki's "Headless" section for the canonical
   list of which mods are known to work / break on a headless instance.
 - **Fika-Server-CSharp:** https://github.com/project-fika/Fika-Server-CSharp
-
-When in doubt about whether a particular mod is safe on headless, check the
-Fika wiki or ask in the Fika Discord.

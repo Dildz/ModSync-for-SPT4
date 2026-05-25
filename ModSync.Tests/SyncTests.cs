@@ -497,7 +497,7 @@ public class HashLocalFilesTests
     public void TestHashLocalFiles()
     {
         var expected = fileContents.Where(kvp => !Sync.IsExcluded(exclusions, kvp.Key)).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("plugins")], exclusions, []).Result;
+        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("plugins")], exclusions).Result;
 
         Assert.That(result, Is.Not.Null);
 
@@ -513,7 +513,7 @@ public class HashLocalFilesTests
     [Test]
     public void TestHashLocalFilesWithDirectoryThatDoesNotExist()
     {
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("bad_directory")], exclusions, []).Result;
+        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("bad_directory")], exclusions).Result;
         Assert.Multiple(() =>
         {
             Assert.That(result, Is.Not.Null);
@@ -526,7 +526,7 @@ public class HashLocalFilesTests
     {
         var syncPath = Path.Combine(testDirectory, @"plugins\file1.dll");
 
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath(syncPath)], exclusions, []).Result;
+        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath(syncPath)], exclusions).Result;
 
         Assert.Multiple(() =>
         {
@@ -541,7 +541,7 @@ public class HashLocalFilesTests
     public void TestHashLocalFilesWithSingleFileThatDoesNotExist()
     {
         var syncPath = Path.Combine(testDirectory, "does_not_exist.dll");
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath(syncPath)], exclusions, []).Result;
+        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath(syncPath)], exclusions).Result;
         Assert.Multiple(() =>
         {
             Assert.That(result, Is.Not.Null);
@@ -549,13 +549,10 @@ public class HashLocalFilesTests
         });
     }
 
-    [Test]
-    public void TestHashLocalFilesEnforcedIgnoresLocalExclusions()
-    {
-        var expected = fileContents.Where(kvp => !Sync.IsExcluded(exclusions, kvp.Key)).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        var result = Sync.HashLocalFiles(testDirectory, [new SyncPath("plugins", enforced: true)], exclusions, [Glob.Create("plugins/file1.dll")]).Result;
-        Assert.That(result["plugins"].Keys, Is.EquivalentTo(expected.Keys));
-    }
+    // TestHashLocalFilesEnforcedIgnoresLocalExclusions removed: local walk no longer
+    // applies player exclusions at all (filter moved to the remote-list step in
+    // Plugin.cs). The enforced flag's remaining role is to bypass the remote-list
+    // filter, exercised in IntegrationTests.TestEnforcedBypassesLocalExclusions.
 }
 
 [TestFixture]

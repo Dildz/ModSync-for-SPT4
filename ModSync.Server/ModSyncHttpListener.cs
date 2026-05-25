@@ -13,10 +13,16 @@ using SPTarkov.Server.Core.Utils;
 namespace ModSync.Server;
 
 /// <summary>
-/// HTTP listener for the /modsync/* routes. Matches upstream's 2-key schema:
-/// /version, /paths, /exclusions, /hashes, /fetch/{file}. No per-client routing —
-/// the server serves one exclusions list and one set of hashes, and the client
-/// decides what to do with its local Exclusions.json on top.
+/// HTTP listener for the /modsync/* routes: /version, /paths, /exclusions, /hashes,
+/// /fetch/{file}. The <c>exclusions</c> + <c>paths</c> endpoints are the same for
+/// every client (universal denylist + syncpath shape). Per-client divergence happens
+/// only on <c>/hashes</c>: a client appends <c>?headless=1</c> when it's a Fika
+/// headless install, and the server applies the <c>headlessIncludes</c> allowlist to
+/// the BepInEx/plugins folder before returning hashes.
+///
+/// Players' per-install opt-outs are not seen by the server — they live in each
+/// install's <c>ModSync_Data/Exclusions.jsonc</c> and are applied client-side after
+/// the server's response arrives.
 ///
 /// How SPT 4 wires this up: anything implementing <see cref="IHttpListener"/> with
 /// <c>[Injectable]</c> is collected by the DI container at startup. When a request
@@ -170,16 +176,22 @@ public class ModSyncHttpListener(
     }
 
     /// <summary>
-    /// GET /modsync/hashes?path=X&amp;path=Y → nested dict: syncpath → file → ModFile.
+    /// GET /modsync/hashes[?headless=1][&amp;path=X&amp;path=Y] → nested dict:
+    /// syncpath → file → ModFile.
     ///
-    /// `path` query params are optional. If provided, only those syncpaths are
-    /// hashed — except syncpaths marked `enforced=true` are always included
-    /// (matches the TS behaviour: built-ins like the ModSync DLL must always
-    /// be reported so the client can self-update).
+    /// <c>?headless=1</c> (presence-only — value ignored) tells the server to apply
+    /// <c>headlessIncludes</c> as an allowlist over BepInEx/plugins. Client appends it
+    /// when it detects Fika headless.
+    ///
+    /// <c>?path</c> query params are optional. If provided, only those syncpaths are
+    /// hashed — except syncpaths marked <c>enforced=true</c> are always included
+    /// (built-ins like the ModSync DLL must always be reported so the client can
+    /// self-update).
     /// </summary>
     private async Task HandleHashesAsync(HttpContext context)
     {
         var query = context.Request.Query;
+        var isHeadless = query.ContainsKey("headless");
         IEnumerable<SyncPath> pathsToHash = _config!.SyncPaths;
 
         if (query.ContainsKey("path"))
@@ -199,7 +211,7 @@ public class ModSyncHttpListener(
         // SyncUtil returns paths in server-cwd terms (e.g. `..\BepInEx\plugins\...`).
         // Translate every outer and inner key to wire form before sending — the client
         // resolves these relative to its own cwd (game root) and would fail otherwise.
-        var serverHashes = await _syncUtil!.HashModFilesAsync(pathsToHash);
+        var serverHashes = await _syncUtil!.HashModFilesAsync(pathsToHash, isHeadless);
         var wireHashes = serverHashes.ToDictionary(
             outer => PathExt.ToWirePath(outer.Key),
             outer => outer.Value.ToDictionary(

@@ -150,8 +150,7 @@ public static class Sync
     public static async Task<SyncPathModFiles> HashLocalFiles(
         string basePath,
         List<SyncPath> syncPaths,
-        List<Regex> remoteExclusions,
-        List<Regex> localExclusions
+        List<Regex> remoteExclusions
     )
     {
         Plugin.Logger.LogInfo($"Corter-ModSync: HashLocalFiles entered. basePath='{basePath}', syncPaths={syncPaths.Count}");
@@ -172,9 +171,16 @@ public static class Sync
             var path = Path.Combine(basePath, syncPath.path);
 
             // Find every candidate file under this syncpath, then hash in parallel.
-            // Enforced syncpaths skip the local exclusions list — admin's choice to
-            // force-sync the path overrides any per-instance opt-out.
-            var candidates = GetFilesInDirectory(basePath, path, [.. remoteExclusions, .. syncPath.enforced ? [] : localExclusions])
+            //
+            // The local walk only filters by REMOTE exclusions (the server's universal
+            // denylist — .nosync sentinels, SPT internals, etc). The player's own
+            // ModSync_Data/Exclusions.jsonc is NOT applied here — that filter is applied
+            // to the REMOTE file list later (in Plugin.cs). Reason: a locally-present
+            // file that the player added to exclusions still needs to be visible to the
+            // diff so GetRemovedFiles can uninstall it (when previousSync says ModSync
+            // installed it). Filtering it out of the local walk would hide it from the
+            // diff and the file would stay forever.
+            var candidates = GetFilesInDirectory(basePath, path, remoteExclusions)
                 .Where(file => !processedFiles.ContainsKey(file));
 
             results[syncPath.path] = (

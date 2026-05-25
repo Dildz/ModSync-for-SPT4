@@ -11,27 +11,43 @@ namespace ModSync.Server;
 /// Processed config — what the rest of the server uses. Holds:
 ///   • SyncPaths: built-ins + user paths, sorted (longest first so deeper matches win)
 ///   • Exclusions: compiled glob list applied to every walk (universal denylist)
+///   • HeadlessIncludes: compiled allowlist scoped to BepInEx/plugins for headless clients
 ///
 /// `SyncPath` is the shared model from `ModSync.Utility` (also used by the client).
 /// Keeping one shape between client/server means the JSON contract is implicit, not duplicated.
 /// </summary>
 public class Config(
     List<SyncPath> syncPaths,
-    List<string> exclusions)
+    List<string> exclusions,
+    List<string> headlessIncludes)
 {
     public readonly List<SyncPath> SyncPaths = syncPaths;
     public readonly List<string> Exclusions = exclusions;
+    public readonly List<string> HeadlessIncludes = headlessIncludes;
 
     // Compile globs once at construction — cheaper than recompiling per file check.
     // `readonly` here means the reference can't change, but the contents (regex internal
     // state) are still mutable. C#'s equivalent of TypeScript's `readonly` array.
     private readonly List<Regex> _exclusionGlobs = exclusions.ConvertAll(Glob.Create);
+    private readonly List<Regex> _headlessIncludeGlobs = headlessIncludes.ConvertAll(Glob.Create);
 
     /// <summary>True if filePath matches any of the configured exclusion globs.</summary>
     public bool IsExcluded(string filePath)
     {
         var normalized = PathExt.UnixPath(filePath);
         return _exclusionGlobs.Exists(g => g.IsMatch(normalized));
+    }
+
+    /// <summary>
+    /// True if filePath matches any headlessIncludes entry. Only meaningful for files
+    /// inside BepInEx/plugins when serving a headless client — callers gate by syncpath
+    /// scope before consulting this. Empty allowlist => everything filtered out (the
+    /// "you haven't configured headless yet" default).
+    /// </summary>
+    public bool IsHeadlessAllowed(string filePath)
+    {
+        var normalized = PathExt.UnixPath(filePath);
+        return _headlessIncludeGlobs.Exists(g => g.IsMatch(normalized));
     }
 }
 
@@ -47,6 +63,7 @@ public record RawConfig
 {
     [JsonPropertyName("syncPaths")] public List<JsonElement> SyncPaths { get; init; } = [];
     [JsonPropertyName("exclusions")] public List<string> Exclusions { get; init; } = [];
+    [JsonPropertyName("headlessIncludes")] public List<string> HeadlessIncludes { get; init; } = [];
 }
 
 /// <summary>
@@ -59,13 +76,16 @@ public record RawConfig
 public class ConfigUtil(ISptLogger<ConfigUtil> logger)
 {
     /// <summary>
-    /// Default config written to disk on first run. Matches upstream Corter ModSync's
-    /// 2-key schema (syncPaths + exclusions). Headless-vs-player routing is handled
-    /// CLIENT-SIDE via ModSync_Data/Exclusions.json — the server doesn't care which
-    /// kind of client is connecting, it just serves its single exclusions list.
+    /// Default config written to disk on first run. Three top-level keys:
+    ///   • syncPaths        — folders the server walks and offers
+    ///   • exclusions       — universal denylist (every client, player and headless)
+    ///   • headlessIncludes — allowlist scoped to BepInEx/plugins for Fika headless clients
     ///
-    /// SPT 4 path note: server runs from `&lt;gameRoot&gt;/SPT/`, so `../BepInEx/...`
-    /// reaches the client-side BepInEx folder. SPT 3 used plain `BepInEx/...`.
+    /// Per-player opt-outs live CLIENT-SIDE in each install's
+    /// <c>&lt;game&gt;/ModSync_Data/Exclusions.jsonc</c> — admins don't manage those.
+    ///
+    /// SPT 4 path note: server runs from <c>&lt;gameRoot&gt;/SPT/</c>, so <c>../BepInEx/...</c>
+    /// reaches the client-side BepInEx folder. SPT 3 used plain <c>BepInEx/...</c>.
     /// </summary>
     private const string DefaultConfig = """
         {
@@ -102,6 +122,23 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 // Git repo metadata — some mods are GitHub-only and may contain files
                 // that aren't needed at runtime.
                 "**/.git"
+            ],
+
+            // ALLOWLIST for Fika headless clients, scoped to ../BepInEx/plugins ONLY.
+            // patchers + config flow through to headless unfiltered (the universal
+            // `exclusions` above still applies).
+            //
+            // A headless client only receives plugin paths that match an entry here.
+            // Empty array (the default) means headless gets ZERO plugins — you MUST
+            // populate this if you run a headless instance.
+            //
+            // Entries can be:
+            //   - a folder: "../BepInEx/plugins/SAIN"               (matches the folder + contents)
+            //   - an exact file: "../BepInEx/plugins/Foo/Bar.dll"   (matches just that file)
+            //   - a glob: "../BepInEx/plugins/*.dll"                (matches whatever the glob matches)
+            //
+            // See CONFIG.md for a starter list for a typical Fika headless setup.
+            "headlessIncludes": [
             ]
         }
         """;
@@ -296,6 +333,6 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         allPaths.AddRange(userPaths);
         allPaths.Sort((a, b) => b.path.Length.CompareTo(a.path.Length));
 
-        return new Config(allPaths, raw.Exclusions);
+        return new Config(allPaths, raw.Exclusions, raw.HeadlessIncludes);
     }
 }

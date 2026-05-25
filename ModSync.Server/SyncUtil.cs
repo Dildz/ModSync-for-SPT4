@@ -17,14 +17,30 @@ namespace ModSync.Server;
 /// loaded. Pattern matches corter's TS where SyncUtil is created per-request with the
 /// loaded config.
 ///
-/// Routing model: the server applies its single exclusions list and returns the result.
-/// The CLIENT is responsible for further filtering via its local Exclusions.json — same
-/// as upstream Corter ModSync 0.11.x.
+/// Routing model:
+///   • Universal <c>exclusions</c> apply to every walk regardless of client kind.
+///   • For Fika headless clients, an additional <c>headlessIncludes</c> ALLOWLIST applies
+///     to files under <c>BepInEx/plugins</c>. Paths in patchers/config flow through to
+///     headless filtered only by the universal exclusions.
+///   • Per-install opt-outs live client-side (<c>ModSync_Data/Exclusions.jsonc</c>) and
+///     never reach the server.
 /// </summary>
 public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 {
     private const int MaxIORetries = 5;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// Heuristic: is this syncpath under BepInEx/plugins? Used to scope the headless
+    /// allowlist — only plugins-area files get the allowlist gate. Handles both
+    /// the direct path <c>../BepInEx/plugins</c> and any deeper sub-path under it.
+    /// Comparison is on the unix-normalized form so backslashes don't trip it up.
+    /// </summary>
+    private static bool IsPluginsScoped(string syncPathRaw)
+    {
+        var p = PathExt.UnixPath(syncPathRaw).TrimEnd('/');
+        return p == "../BepInEx/plugins" || p.StartsWith("../BepInEx/plugins/", StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Recursive directory walk. Yields the path of every file we'd consider syncing,
@@ -128,9 +144,16 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     ///
     /// Files seen across multiple syncpaths only get hashed once (the first time we
     /// encounter them). Matches corter's dedup-by-set behavior in sync.ts.
+    ///
+    /// <paramref name="isHeadless"/> — when true, the headlessIncludes allowlist gates
+    /// every file under BepInEx/plugins. Files in patchers/config (and any non-plugins
+    /// syncpath) flow through filtered only by the universal exclusions. Enforced
+    /// syncpaths (e.g. the built-in Corter-ModSync plugin) bypass the allowlist so the
+    /// mod itself can always self-update on headless.
     /// </summary>
     public async Task<Dictionary<string, Dictionary<string, ModFile>>> HashModFilesAsync(
-        IEnumerable<SyncPath> syncPaths)
+        IEnumerable<SyncPath> syncPaths,
+        bool isHeadless = false)
     {
         var result = new Dictionary<string, Dictionary<string, ModFile>>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -141,10 +164,19 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         {
             var perPath = new Dictionary<string, ModFile>();
 
+            // Decide once per syncpath whether the headless allowlist applies here.
+            // Enforced paths bypass the gate so ModSync itself can always self-update.
+            var applyAllowlist = isHeadless && !syncPath.enforced && IsPluginsScoped(syncPath.path);
+
             foreach (var file in GetFilesInDir(syncPath.path))
             {
                 var winFile = PathExt.WinPath(file);
                 if (!seen.Add(winFile)) continue;
+
+                // Headless+plugins: file must match an allowlist entry to be served.
+                // Empty allowlist (admin hasn't configured headlessIncludes) means
+                // zero plugins reach headless — intentional "fail closed" default.
+                if (applyAllowlist && !config.IsHeadlessAllowed(file)) continue;
 
                 perPath[winFile] = await BuildModFileAsync(file);
                 filesHashed++;
@@ -154,7 +186,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         }
 
         var elapsedMs = (DateTime.UtcNow - startedAt).TotalMilliseconds;
-        logger.Info($"Corter-ModSync: hashed {filesHashed} files in {elapsedMs:F0}ms.");
+        logger.Info($"Corter-ModSync: hashed {filesHashed} files in {elapsedMs:F0}ms (headless={isHeadless}).");
 
         return result;
     }

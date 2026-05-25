@@ -32,15 +32,36 @@ public class IntegrationTests
         var previousSyncPath = Path.Combine(localPath, "ModSync_Data", "PreviousSync.json");
         var previousSync = File.Exists(previousSyncPath) ? JsonConvert.DeserializeObject<SyncPathModFiles>(File.ReadAllText(previousSyncPath)) : [];
 
+        // Read raw exclusion strings. Test fixtures still use ModSync_Data/Exclusions.json
+        // (no 'c') — production renames it to .jsonc on first run, but the in-place
+        // legacy file is still readable. Either extension parses fine through Newtonsoft.
         var localExclusionsPath = Path.Combine(localPath, "ModSync_Data", "Exclusions.json");
-        var localExclusions = File.Exists(localExclusionsPath)
-            ? JsonConvert.DeserializeObject<List<string>>(File.ReadAllText(localExclusionsPath))!.Select(Glob.Create).ToList()
+        var localExclusionsRaw = File.Exists(localExclusionsPath)
+            ? JsonConvert.DeserializeObject<List<string>>(File.ReadAllText(localExclusionsPath))!
             : [];
 
         List<Regex> remoteExclusions = [Glob.Create("**/*.nosync"), Glob.Create("**/*.nosync.txt")];
 
-        var remoteModFiles = Sync.HashLocalFiles(remotePath, syncPaths, remoteExclusions, localExclusions).Result;
-        var localModFiles = Sync.HashLocalFiles(localPath, syncPaths, remoteExclusions, localExclusions).Result;
+        // Local walk and remote walk both see everything (only filter on remote-side
+        // exclusions like .nosync). Player-side localExclusions are applied AFTER the
+        // walk, only to the remote file list — mirroring production behavior at
+        // Plugin.cs's `remotePathHashes` filter step.
+        var remoteModFiles = Sync.HashLocalFiles(remotePath, syncPaths, remoteExclusions).Result;
+        var localModFiles = Sync.HashLocalFiles(localPath, syncPaths, remoteExclusions).Result;
+
+        var localExclusionsForRemote = localExclusionsRaw.Select(Glob.CreateNoEnd).ToList();
+        remoteModFiles = syncPaths
+            .Select(syncPath =>
+            {
+                if (!remoteModFiles.TryGetValue(syncPath.path, out var rPathHashes))
+                    return new KeyValuePair<string, Dictionary<string, ModFile>>(syncPath.path, []);
+                if (!syncPath.enforced)
+                    rPathHashes = rPathHashes
+                        .Where(kvp => !Sync.IsExcluded(localExclusionsForRemote, kvp.Key))
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+                return new KeyValuePair<string, Dictionary<string, ModFile>>(syncPath.path, rPathHashes);
+            })
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
         Sync.CompareModFiles(
             Path.Combine(testPath, "local"),

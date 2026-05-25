@@ -22,7 +22,7 @@ namespace ModSync;
 using SyncPathFileList = Dictionary<string, List<string>>;
 using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 
-[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.0")]
+[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.1")]
 public class Plugin : BaseUnityPlugin
 {
     private static readonly string MODSYNC_DIR = Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data");
@@ -30,30 +30,41 @@ public class Plugin : BaseUnityPlugin
     private static readonly string PREVIOUS_SYNC_PATH = Path.Combine(MODSYNC_DIR, "PreviousSync.json");
     private static readonly string LOCAL_HASHES_PATH = Path.Combine(MODSYNC_DIR, "LocalHashes.json");
     private static readonly string REMOVED_FILES_PATH = Path.Combine(MODSYNC_DIR, "RemovedFiles.json");
-    private static readonly string LOCAL_EXCLUSIONS_PATH = Path.Combine(MODSYNC_DIR, "Exclusions.json");
+    private static readonly string LOCAL_EXCLUSIONS_PATH = Path.Combine(MODSYNC_DIR, "Exclusions.jsonc");
+    private static readonly string LEGACY_EXCLUSIONS_PATH = Path.Combine(MODSYNC_DIR, "Exclusions.json");
     private static readonly string UPDATER_PATH = Path.Combine(Directory.GetCurrentDirectory(), "ModSync.Updater.exe");
 
     /// <summary>
-    /// Default contents of <c>ModSync_Data/Exclusions.json</c> when a Fika headless client
-    /// runs ModSync for the very first time. List is taken verbatim from upstream Corter
-    /// ModSync 0.11.x. After first boot, the admin is free to hand-edit Exclusions.json on
-    /// the headless instance — these are the bootstrap defaults, not a hard restriction.
+    /// Content written to a fresh <c>ModSync_Data/Exclusions.jsonc</c> on first run.
+    /// Same template for player and headless installs — no hardcoded mod names. The
+    /// in-file comment header explains the semantic so admins/players can hand-edit
+    /// the file without consulting docs.
     ///
-    /// Note: most of these are SPT 3.x-era mod names that may not exist or behave the same
-    /// on SPT 4.0. Curating an SPT-4-appropriate list is tracked separately (see CONFIG.md).
+    /// <c>@"..."</c> is a verbatim string literal: backslashes are taken literally,
+    /// and the only escape sequence is <c>""</c> for a single double-quote.
     /// </summary>
-    private static readonly List<string> HEADLESS_DEFAULT_EXCLUSIONS =
-    [
-        "BepInEx/plugins/AmandsGraphics.dll",
-        "BepInEx/plugins/AmandsSense.dll",
-        "BepInEx/plugins/Sense",
-        "BepInEx/plugins/MoreCheckmarks",
-        "BepInEx/plugins/kmyuhkyuk-EFTApi",
-        "BepInEx/plugins/DynamicMaps",
-        "BepInEx/plugins/LootValue",
-        "BepInEx/plugins/CactusPie.RamCleanerInterval.dll",
-        "BepInEx/plugins/TYR_DeClutterer.dll",
-    ];
+    private const string EXCLUSIONS_SEED_TEMPLATE = @"// Personal denylist — paths or globs ModSync should NOT install or keep
+// installed on this machine. Applied on top of the server's exclusions.
+//
+// Semantics:
+//   - If ModSync previously installed a listed file, it will be REMOVED
+//     on next sync.
+//   - If you copied the file in by hand (ModSync never installed it),
+//     ModSync leaves it alone — only files ModSync installed are touched.
+//   - Listed files won't be downloaded going forward.
+//
+// On a Fika headless install this file is usually EMPTY — the server's
+// `headlessIncludes` allowlist controls what reaches headless. Use this
+// file only for per-install overrides on top of the allowlist.
+//
+// Edits to this file are read at game startup, not live — restart EFT
+// to apply.
+//
+// Examples (delete the empty array below and replace with your own):
+//   ""BepInEx/plugins/AmandsGraphics.dll"",
+//   ""BepInEx/plugins/DynamicMaps/**""
+[]
+";
 
     // Configuration
     private Dictionary<string, ConfigEntry<bool>> configSyncPathToggles;
@@ -430,39 +441,60 @@ public class Plugin : BaseUnityPlugin
             yield break;
         }
 
-        // Optional per-install denylist — users can hand-edit ModSync_Data/Exclusions.json
-        // to skip specific files locally on top of whatever the server filters out.
+        // Per-install denylist — paths/globs the user (or admin, on a headless instance)
+        // doesn't want ModSync to install or keep installed on this machine. Same file
+        // and semantics for both player and headless. See EXCLUSIONS_SEED_TEMPLATE for
+        // the in-file explanation written to the seed.
         //
-        // Headless bootstrap: when a Fika headless client runs ModSync for the first time
-        // and there's no Exclusions.json yet, seed it with HEADLESS_DEFAULT_EXCLUSIONS so
-        // the headless skips UI/graphics mods that don't make sense without a display.
-        // Subsequent boots read whatever's on disk — admin can curate it freely.
+        // First-run handling:
+        //   1. Legacy v0.12.0 installs may have ModSync_Data/Exclusions.json (no 'c').
+        //      Rename it in place so the user's existing list survives the format change.
+        //   2. Otherwise, seed an empty array with the comment header.
         Logger.LogDebug("Loading local exclusions");
-        if (IsHeadless && !VFS.Exists(LOCAL_EXCLUSIONS_PATH))
+        if (!VFS.Exists(LOCAL_EXCLUSIONS_PATH))
         {
-            try
+            if (VFS.Exists(LEGACY_EXCLUSIONS_PATH))
             {
-                VFS.WriteTextFile(LOCAL_EXCLUSIONS_PATH, Json.Serialize(HEADLESS_DEFAULT_EXCLUSIONS));
+                try
+                {
+                    File.Move(LEGACY_EXCLUSIONS_PATH, LOCAL_EXCLUSIONS_PATH);
+                    Logger.LogInfo("ModSync: migrated legacy Exclusions.json → Exclusions.jsonc.");
+                }
+                catch (Exception e)
+                {
+                    Logger.LogWarning($"ModSync: could not migrate Exclusions.json → .jsonc, will read legacy file in place: {e.Message}");
+                }
             }
-            catch (Exception e)
+            else
             {
-                Logger.LogError(e);
-                Chainloader.DependencyErrors.Add(
-                    $"Could not load {Info.Metadata.Name} due to error writing local exclusions file for headless client. Please check BepInEx/LogOutput.log for more information."
-                );
-                yield break;
+                try
+                {
+                    VFS.WriteTextFile(LOCAL_EXCLUSIONS_PATH, EXCLUSIONS_SEED_TEMPLATE);
+                }
+                catch (Exception e)
+                {
+                    Logger.LogError(e);
+                    Chainloader.DependencyErrors.Add(
+                        $"Could not load {Info.Metadata.Name} due to error writing local exclusions file. Please check BepInEx/LogOutput.log for more information."
+                    );
+                    yield break;
+                }
             }
         }
 
+        // Whichever file actually exists wins. Newtonsoft (via SPT's Json helper) skips
+        // // and /* */ comments natively, so .jsonc content parses fine through the same
+        // call we used for plain .json.
+        var exclusionsFilePath = VFS.Exists(LOCAL_EXCLUSIONS_PATH) ? LOCAL_EXCLUSIONS_PATH : LEGACY_EXCLUSIONS_PATH;
         try
         {
-            localExclusions = VFS.Exists(LOCAL_EXCLUSIONS_PATH) ? Json.Deserialize<List<string>>(VFS.ReadTextFile(LOCAL_EXCLUSIONS_PATH)) : [];
+            localExclusions = VFS.Exists(exclusionsFilePath) ? Json.Deserialize<List<string>>(VFS.ReadTextFile(exclusionsFilePath)) : [];
         }
         catch (Exception e)
         {
             Logger.LogError(e);
             Chainloader.DependencyErrors.Add(
-                $"Could not load {Info.Metadata.Name} due to malformed local exclusion data. Please check ModSync_Data/Exclusions.json for errors or delete it, and try again."
+                $"Could not load {Info.Metadata.Name} due to malformed local exclusion data. Please check ModSync_Data/Exclusions.jsonc for errors or delete it, and try again."
             );
             yield break;
         }
@@ -502,8 +534,7 @@ public class Plugin : BaseUnityPlugin
         var localModFilesTask = Sync.HashLocalFiles(
             Directory.GetCurrentDirectory(),
             EnabledSyncPaths,
-            exclusions.Select(Glob.Create).ToList(),
-            localExclusions.Select(Glob.Create).ToList()
+            exclusions.Select(Glob.Create).ToList()
         );
 
         yield return new WaitUntil(() => localModFilesTask.IsCompleted);

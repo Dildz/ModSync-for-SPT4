@@ -175,8 +175,12 @@ public class Server(Version pluginVersion)
     public async Task<SyncPathModFiles> GetRemoteModFileHashes(List<SyncPath> syncPaths)
     {
         var pathQuery = string.Join("&path=", syncPaths.Select(path => Uri.EscapeUriString(path.path.Replace(@"\", "/"))));
+        // Append ?headless=1 when running inside Fika headless so the server applies
+        // its `headlessIncludes` allowlist to plugins/. Players get the full set;
+        // headless only gets what the admin allowlisted.
+        var headlessPrefix = Plugin.IsHeadless ? "headless=1&" : "";
         return Json.Deserialize<SyncPathModFiles>(
-                await GetJson($"/modsync/hashes?path={pathQuery}")
+                await GetJson($"/modsync/hashes?{headlessPrefix}path={pathQuery}")
             )
             .ToDictionary(
                 item => item.Key,
