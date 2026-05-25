@@ -132,10 +132,12 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             // Empty array (the default) means headless gets ZERO plugins — you MUST
             // populate this if you run a headless instance.
             //
-            // Entries can be:
-            //   - a folder: "../BepInEx/plugins/SAIN"               (matches the folder + contents)
-            //   - an exact file: "../BepInEx/plugins/Foo/Bar.dll"   (matches just that file)
-            //   - a glob: "../BepInEx/plugins/*.dll"                (matches whatever the glob matches)
+            // Entries should be EXPLICIT — either a mod folder or an individual DLL.
+            // Don't use globs like "*.dll" here. The whole point of an allowlist is
+            // being deliberate about what reaches headless; a careless glob can
+            // accidentally re-include everything you meant to keep out.
+            //   - a folder:     "../BepInEx/plugins/SAIN"             (matches the folder + contents)
+            //   - an exact DLL: "../BepInEx/plugins/Foo/Bar.dll"      (matches just that file)
             //
             // See CONFIG.md for a starter list for a typical Fika headless setup.
             "headlessIncludes": [

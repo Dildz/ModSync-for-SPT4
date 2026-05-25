@@ -92,12 +92,15 @@ only by the universal `exclusions` above.
 **Empty array is the default — and means headless gets ZERO plugins.**
 If you run a headless instance, you MUST populate this list.
 
-Entries can be:
+Entries should be **explicit** — either a mod folder or an individual DLL.
+**Don't use globs here.** The whole point of an allowlist is being deliberate
+about what reaches headless; a glob like `*.dll` can accidentally
+re-include everything you meant to keep out.
+
 - **A folder**: `../BepInEx/plugins/SAIN` matches the folder and everything
   inside it. Directory boundary check applies: `SAIN` does NOT match `SAINFoo`.
-- **An exact file**: `../BepInEx/plugins/Fika/Fika.Headless.dll` matches just
+- **An exact DLL**: `../BepInEx/plugins/Fika/Fika.Headless.dll` matches just
   that one file. Sibling files in the same folder are NOT pulled in.
-- **A glob**: `../BepInEx/plugins/*.dll` matches whatever the glob matches.
 
 > **Why an allowlist (not a denylist) for headless?** Headless has no human
 > at the keyboard — most UI/HUD/visual mods would crash it or waste disk.
