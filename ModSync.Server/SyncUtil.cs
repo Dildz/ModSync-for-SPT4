@@ -15,16 +15,11 @@ namespace ModSync.Server;
 ///
 /// Not an [Injectable] class — constructed manually by the HTTP listener after Config has
 /// loaded. Pattern matches corter's TS where SyncUtil is created per-request with the
-/// loaded config. DI for Config + logger would be cleaner if SPT had a "load order"
-/// dependency mechanism, but we don't need that complexity here.
+/// loaded config.
 ///
-/// Routing model: every walk takes an <c>isHeadless</c> flag. The same filesystem walk
-/// produces different result sets for player vs headless clients:
-///   • Both: <c>GlobalExclusions</c> always applies.
-///   • Player only: <c>ClientExclusions</c> applies.
-///   • Headless only: inside <c>BepInEx/plugins</c>, <c>HeadlessIncludes</c> acts as an
-///     allowlist — files there must match an include or they're skipped. <c>patchers/</c>
-///     and <c>config/</c> are not allowlist-filtered (master list says headless gets all).
+/// Routing model: the server applies its single exclusions list and returns the result.
+/// The CLIENT is responsible for further filtering via its local Exclusions.json — same
+/// as upstream Corter ModSync 0.11.x.
 /// </summary>
 public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 {
@@ -32,53 +27,16 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
-    /// Per-path filter decision. Returns true if this path should be skipped for the
-    /// given client kind. Encapsulates the three-array routing rules in one place so
-    /// the walker stays readable.
-    ///
-    /// The headless allowlist only kicks in inside <see cref="Config.PluginsFolder"/>;
-    /// files in patchers/ and config/ skip the allowlist check (still subject to
-    /// GlobalExclusions). Mirrors the master-list rule "Headless &amp; Player get all
-    /// of these" for non-plugins folders.
-    /// </summary>
-    private bool ShouldSkip(string path, bool isHeadless)
-    {
-        // Universal denylist — applies to both client kinds.
-        if (config.IsGloballyExcluded(path)) return true;
-
-        if (isHeadless)
-        {
-            // Headless allowlist scope: BepInEx/plugins only. Outside that, no allowlist.
-            if (Config.IsInPluginsFolder(path) && !config.MatchesHeadlessInclude(path))
-            {
-                return true;
-            }
-        }
-        else
-        {
-            // Player-only denylist (e.g. Fika.Headless.dll).
-            if (config.IsClientExcluded(path)) return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Recursive directory walk. Yields the path of every file we'd consider syncing
-    /// for the given client kind, applying exclusions/inclusions as we go. Also yields
-    /// any empty directory's own path — clients need to recreate empty dirs on their
-    /// side, so we represent them as path entries with an empty hash and
-    /// <c>directory=true</c> in the final ModFile.
+    /// Recursive directory walk. Yields the path of every file we'd consider syncing,
+    /// applying the configured exclusions as we go. Also yields any empty directory's
+    /// own path — clients need to recreate empty dirs on their side, so we represent
+    /// them as path entries with an empty hash and <c>directory=true</c> in the final
+    /// ModFile.
     ///
     /// `yield return` (vs returning a list): lazy enumeration. Each item is produced on
     /// demand as the caller iterates. Memory stays flat regardless of how big the tree is.
-    ///
-    /// Subdirectory descent for headless: we ALWAYS recurse into plugins subdirs (even
-    /// non-allowlisted ones) and apply the allowlist at the file level. This is wasteful
-    /// for big mod sets, but correct in the face of glob-style includes. Smart pruning
-    /// can be added later if walk cost becomes noticeable.
     /// </summary>
-    public IEnumerable<string> GetFilesInDir(string dir, bool isHeadless)
+    public IEnumerable<string> GetFilesInDir(string dir)
     {
         // Three early-exit cases, in order:
         //   1) Path doesn't exist at all (likely a stale syncpath) — warn and skip.
@@ -92,8 +50,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 
         if (File.Exists(dir))
         {
-            // A bare-file syncpath (e.g. the built-in Updater). Still subject to filters.
-            if (ShouldSkip(dir, isHeadless)) yield break;
+            if (config.IsExcluded(dir)) yield break;
             yield return dir;
             yield break;
         }
@@ -104,19 +61,17 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         // entry from the OS at a time, doesn't materialize the full list.
         foreach (var file in Directory.EnumerateFiles(dir))
         {
-            if (ShouldSkip(file, isHeadless)) continue;
+            if (config.IsExcluded(file)) continue;
             yield return file;
             hasContents = true;
         }
 
-        // Subdirectories — recurse into each. Pruning at the dir level only applies to
-        // hard deny lists (Global, Client). Headless allowlist is enforced per-file.
+        // Subdirectories — recurse into each.
         foreach (var subDir in Directory.EnumerateDirectories(dir))
         {
-            if (config.IsGloballyExcluded(subDir)) continue;
-            if (!isHeadless && config.IsClientExcluded(subDir)) continue;
+            if (config.IsExcluded(subDir)) continue;
 
-            foreach (var x in GetFilesInDir(subDir, isHeadless))
+            foreach (var x in GetFilesInDir(subDir))
             {
                 yield return x;
                 hasContents = true;
@@ -125,18 +80,8 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 
         // If we walked the whole directory and produced nothing (empty dir, or every
         // child was excluded), yield the dir itself so the client knows to recreate it.
-        //
-        // Exception: for headless inside the plugins folder, don't yield empty dirs
-        // that aren't allowlisted — we shouldn't tell headless to recreate
-        // SomeUIMod/ just because we filtered out every file inside.
         if (!hasContents)
         {
-            if (isHeadless
-                && Config.IsInPluginsFolder(dir)
-                && !config.MatchesHeadlessInclude(dir))
-            {
-                yield break;
-            }
             yield return dir;
         }
     }
@@ -183,12 +128,9 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     ///
     /// Files seen across multiple syncpaths only get hashed once (the first time we
     /// encounter them). Matches corter's dedup-by-set behavior in sync.ts.
-    ///
-    /// <paramref name="isHeadless"/> selects the filter set — see class doc for the rules.
     /// </summary>
     public async Task<Dictionary<string, Dictionary<string, ModFile>>> HashModFilesAsync(
-        IEnumerable<SyncPath> syncPaths,
-        bool isHeadless)
+        IEnumerable<SyncPath> syncPaths)
     {
         var result = new Dictionary<string, Dictionary<string, ModFile>>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -199,7 +141,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         {
             var perPath = new Dictionary<string, ModFile>();
 
-            foreach (var file in GetFilesInDir(syncPath.path, isHeadless))
+            foreach (var file in GetFilesInDir(syncPath.path))
             {
                 var winFile = PathExt.WinPath(file);
                 if (!seen.Add(winFile)) continue;
@@ -212,7 +154,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         }
 
         var elapsedMs = (DateTime.UtcNow - startedAt).TotalMilliseconds;
-        logger.Info($"Corter-ModSync: hashed {filesHashed} files in {elapsedMs:F0}ms (mode={(isHeadless ? "headless" : "player")}).");
+        logger.Info($"Corter-ModSync: hashed {filesHashed} files in {elapsedMs:F0}ms.");
 
         return result;
     }
@@ -221,18 +163,6 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     /// Resolve and security-check a path the client asked to download. Throws
     /// <see cref="HttpError"/> with status 400 if the resolved path escapes every
     /// configured syncpath (path traversal attempt or stale client request).
-    ///
-    /// Logic:
-    ///   1. Treat `file` as relative to the server's working directory.
-    ///   2. Resolve to an absolute path, collapsing `..` and `.` segments.
-    ///   3. For each syncpath, resolve its absolute form too. If `Path.GetRelativePath`
-    ///      from the syncpath to the requested path doesn't start with ".." then the
-    ///      request is inside that syncpath — accept it.
-    ///
-    /// Note: this does NOT enforce the per-client routing filter. Hash response is the
-    /// primary gate; a client asking for a file it wasn't told about would only happen
-    /// via a tampered or stale request and is rare. Adding the filter here would add
-    /// defense-in-depth but complicates the API. Revisit if it becomes a real concern.
     /// </summary>
     public static string SanitizeDownloadPath(string file, IEnumerable<SyncPath> syncPaths)
     {
