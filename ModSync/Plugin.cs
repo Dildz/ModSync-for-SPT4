@@ -22,7 +22,7 @@ namespace ModSync;
 using SyncPathFileList = Dictionary<string, List<string>>;
 using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 
-[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.1")]
+[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.2")]
 public class Plugin : BaseUnityPlugin
 {
     private static readonly string MODSYNC_DIR = Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data");
@@ -311,11 +311,20 @@ public class Plugin : BaseUnityPlugin
 
     private void StartUpdaterProcess()
     {
-        List<string> options = [];
-
         if (IsHeadless)
-            options.Add("--silent");
+        {
+            // On Linux/Wine, Process.Start() with UseShellExecute=false exec()s the PE
+            // binary directly as a Linux process — it fails with ENOEXEC and the updater
+            // never runs. Apply pending updates in-process instead, then quit so Docker's
+            // restart loop brings EFT back up with the new files already in place.
+            Logger.LogInfo("ModSync: headless — applying pending updates in-process.");
+            try { ApplyPendingUpdatesInProcess(); }
+            catch (Exception e) { Logger.LogError($"ModSync: in-process apply failed: {e}"); }
+            Application.Quit();
+            return;
+        }
 
+        List<string> options = [];
         Logger.LogInfo($"Starting Updater with arguments {string.Join(" ", options)} {Process.GetCurrentProcess().Id}");
         var updaterStartInfo = new ProcessStartInfo
         {
@@ -326,9 +335,42 @@ public class Plugin : BaseUnityPlugin
         };
 
         var updaterProcess = new Process { StartInfo = updaterStartInfo };
-
         updaterProcess.Start();
         Application.Quit();
+    }
+
+    private void ApplyPendingUpdatesInProcess()
+    {
+        var gameDir = Directory.GetCurrentDirectory();
+
+        if (Directory.Exists(PENDING_UPDATES_DIR))
+        {
+            foreach (var src in Directory.EnumerateFiles(PENDING_UPDATES_DIR, "*", SearchOption.AllDirectories))
+            {
+                var rel = src.Substring(PENDING_UPDATES_DIR.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var dest = Path.Combine(gameDir, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                File.Copy(src, dest, overwrite: true);
+                Logger.LogInfo($"ModSync: applied {rel}");
+            }
+            Directory.Delete(PENDING_UPDATES_DIR, true);
+            Logger.LogInfo("ModSync: all pending updates applied.");
+        }
+
+        if (File.Exists(REMOVED_FILES_PATH))
+        {
+            var toRemove = Json.Deserialize<List<string>>(VFS.ReadTextFile(REMOVED_FILES_PATH));
+            foreach (var rel in toRemove)
+            {
+                var fullPath = Path.Combine(gameDir, rel);
+                if (File.Exists(fullPath))
+                {
+                    File.Delete(fullPath);
+                    Logger.LogInfo($"ModSync: removed {rel}");
+                }
+            }
+            File.Delete(REMOVED_FILES_PATH);
+        }
     }
 
     private IEnumerator StartPlugin()
