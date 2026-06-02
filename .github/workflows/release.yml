@@ -62,6 +62,7 @@ jobs:
         #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll        (BepInEx client plugin)
         #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll.config (binding redirects)
         #   <game>/SPT/user/mods/Corter-ModSync/ModSync.Server.dll          (server mod)
+        #   <game>/SPT/user/mods/Corter-ModSync/config.jsonc                (default config — edit before first run)
         #   <game>/ModSync.Updater.exe                                      (single-file updater)
         # User unzips into their game root and the right files end up in the right places.
         # BepInEx scans plugins/ recursively, so the subfolder layout works seamlessly
@@ -76,8 +77,9 @@ jobs:
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll"        "$stage/BepInEx/plugins/Corter-ModSync/"
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll.config" "$stage/BepInEx/plugins/Corter-ModSync/"
 
-          # Server mod
+          # Server mod + default config (bundled so admins can edit before first run)
           Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT/user/mods/Corter-ModSync/"
+          Copy-Item "ModSync.Server/config.jsonc"                                  "$stage/SPT/user/mods/Corter-ModSync/"
 
           # Updater — single-file output from the publish step above. Just the .exe
           # (~1.6MB) with Newtonsoft.Json, deps.json, and runtimeconfig.json all bundled in.

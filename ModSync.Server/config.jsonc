@@ -1,0 +1,55 @@
+{
+    // SPT 4 directory layout: server runs from <gameRoot>/SPT/.
+    //   "<gameRoot>/BepInEx/..."  →  client-side mods (../BepInEx/...)
+    //
+    // The `user/mods` folder is NOT a syncPath. Server mods stay server-only
+    // by design — their client-facing components ship as separate BepInEx
+    // plugins, which DO sync via the paths below.
+    "syncPaths": [
+        "../BepInEx/plugins",
+        "../BepInEx/patchers",
+        "../BepInEx/config"
+    ],
+
+    // Skipped on EVERY sync (players AND headless alike).
+    // Use for SPT internals, per-instance state files mods don't want
+    // overwritten, and the universal `.nosync` opt-out pattern.
+    // See CONFIG.md for guidance on what belongs here.
+    "exclusions": [
+        // SPT Installer files — not "mods", they come with the SPT install
+        "../BepInEx/plugins/spt",
+        "../BepInEx/patchers/spt-prepatch.dll",
+
+        // Fika headless DLL — must never reach regular players. Headless
+        // instances get this from their image / manual install, not via sync.
+        "../BepInEx/plugins/Fika/Fika.Headless.dll",
+
+        // Universal per-file opt-out — drop a `.nosync` or `.nosync.txt` file
+        // next to any mod folder/file to skip it
+        "**/*.nosync",
+        "**/*.nosync.txt",
+
+        // Git repo metadata — some mods are GitHub-only and may contain files
+        // that aren't needed at runtime.
+        "**/.git"
+    ],
+
+    // ALLOWLIST for Fika headless clients, scoped to ../BepInEx/plugins ONLY.
+    // patchers + config flow through to headless unfiltered (the universal
+    // `exclusions` above still applies).
+    //
+    // A headless client only receives plugin paths that match an entry here.
+    // Empty array (the default) means headless gets ZERO plugins — you MUST
+    // populate this if you run a headless instance.
+    //
+    // Entries should be EXPLICIT — either a mod folder or an individual DLL.
+    // Don't use globs like "*.dll" here. The whole point of an allowlist is
+    // being deliberate about what reaches headless; a careless glob can
+    // accidentally re-include everything you meant to keep out.
+    //   - a folder:     "../BepInEx/plugins/SAIN"             (matches the folder + contents)
+    //   - an exact DLL: "../BepInEx/plugins/Foo/Bar.dll"      (matches just that file)
+    //
+    // See CONFIG.md for a starter list for a typical Fika headless setup.
+    "headlessIncludes": [
+    ]
+}

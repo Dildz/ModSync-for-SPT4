@@ -29,7 +29,11 @@ public class Config(
     // `readonly` here means the reference can't change, but the contents (regex internal
     // state) are still mutable. C#'s equivalent of TypeScript's `readonly` array.
     private readonly List<Regex> _exclusionGlobs = exclusions.ConvertAll(Glob.Create);
-    private readonly List<Regex> _headlessIncludeGlobs = headlessIncludes.ConvertAll(Glob.Create);
+
+    // headlessIncludes uses plain prefix matching instead of globs — globs aren't
+    // supported (by design; see config comments) so there's nothing to compile.
+    private readonly List<string> _normalizedHeadlessIncludes =
+        headlessIncludes.ConvertAll(e => PathExt.UnixPath(e).TrimEnd('/'));
 
     /// <summary>True if filePath matches any of the configured exclusion globs.</summary>
     public bool IsExcluded(string filePath)
@@ -43,11 +47,17 @@ public class Config(
     /// inside BepInEx/plugins when serving a headless client — callers gate by syncpath
     /// scope before consulting this. Empty allowlist => everything filtered out (the
     /// "you haven't configured headless yet" default).
+    ///
+    /// Entries can be a folder ("../BepInEx/plugins/SAIN") or an exact file
+    /// ("../BepInEx/plugins/Foo.dll"). A folder entry matches the folder itself
+    /// (empty-dir sentinel) and all files inside it. Exact-file entries match only
+    /// that one file. Simple prefix matching — no glob support here by design.
     /// </summary>
     public bool IsHeadlessAllowed(string filePath)
     {
         var normalized = PathExt.UnixPath(filePath);
-        return _headlessIncludeGlobs.Exists(g => g.IsMatch(normalized));
+        return _normalizedHeadlessIncludes.Exists(entry =>
+            normalized == entry || normalized.StartsWith(entry + "/", StringComparison.Ordinal));
     }
 }
 
