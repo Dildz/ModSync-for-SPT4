@@ -22,7 +22,7 @@ namespace ModSync;
 using SyncPathFileList = Dictionary<string, List<string>>;
 using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 
-[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.2")]
+[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.3")]
 public class Plugin : BaseUnityPlugin
 {
     private static readonly string MODSYNC_DIR = Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data");
@@ -339,6 +339,11 @@ public class Plugin : BaseUnityPlugin
         Application.Quit();
     }
 
+    // True if the game-root-relative path is inside EscapeFromTarkov_Data/Managed/.
+    // Normalizes separators so it works on both Windows (\) and Linux/Wine (/).
+    private static bool IsInManagedFolder(string relPath) =>
+        relPath.Replace('\\', '/').StartsWith("EscapeFromTarkov_Data/Managed/", StringComparison.OrdinalIgnoreCase);
+
     private void ApplyPendingUpdatesInProcess()
     {
         var gameDir = Directory.GetCurrentDirectory();
@@ -350,6 +355,16 @@ public class Plugin : BaseUnityPlugin
                 var rel = src.Substring(PENDING_UPDATES_DIR.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 var dest = Path.Combine(gameDir, rel);
                 Directory.CreateDirectory(Path.GetDirectoryName(dest));
+
+                // Back up any existing Managed file before overwriting — lets us restore
+                // the original (vanilla or previous mod version) if the entry is later
+                // removed from managedIncludes. No-op if file didn't exist (Docker/new install).
+                if (IsInManagedFolder(rel) && File.Exists(dest))
+                {
+                    File.Copy(dest, dest + ".modsync-bak", overwrite: true);
+                    Logger.LogInfo($"ModSync: backed up {rel}");
+                }
+
                 File.Copy(src, dest, overwrite: true);
                 Logger.LogInfo($"ModSync: applied {rel}");
             }
@@ -363,7 +378,19 @@ public class Plugin : BaseUnityPlugin
             foreach (var rel in toRemove)
             {
                 var fullPath = Path.Combine(gameDir, rel);
-                if (File.Exists(fullPath))
+                if (!File.Exists(fullPath))
+                    continue;
+
+                var bakPath = fullPath + ".modsync-bak";
+                if (IsInManagedFolder(rel) && File.Exists(bakPath))
+                {
+                    // Restore the backed-up original instead of deleting.
+                    // File.Move with overwrite isn't available in net472 — copy then delete.
+                    File.Copy(bakPath, fullPath, overwrite: true);
+                    File.Delete(bakPath);
+                    Logger.LogInfo($"ModSync: restored {rel}");
+                }
+                else
                 {
                     File.Delete(fullPath);
                     Logger.LogInfo($"ModSync: removed {rel}");

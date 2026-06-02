@@ -11,7 +11,9 @@
         "../BepInEx/config"
     ],
 
-    // Skipped on EVERY sync (players AND headless alike).
+    //-----------------------------------------------------------------------
+
+    // Paths ignored by ModSync (players AND headless alike).
     // Use for SPT internals, per-instance state files mods don't want
     // overwritten, and the universal `.nosync` opt-out pattern.
     // See CONFIG.md for guidance on what belongs here.
@@ -34,6 +36,8 @@
         "**/.git"
     ],
 
+    //-----------------------------------------------------------------------
+
     // ALLOWLIST for Fika headless clients, scoped to ../BepInEx/plugins ONLY.
     // patchers + config flow through to headless unfiltered (the universal
     // `exclusions` above still applies).
@@ -46,10 +50,53 @@
     // Don't use globs like "*.dll" here. The whole point of an allowlist is
     // being deliberate about what reaches headless; a careless glob can
     // accidentally re-include everything you meant to keep out.
-    //   - a folder:     "../BepInEx/plugins/SAIN"             (matches the folder + contents)
-    //   - an exact DLL: "../BepInEx/plugins/Foo/Bar.dll"      (matches just that file)
+    //   - a folder:     "../BepInEx/plugins/SAIN"                      (matches the folder + contents)
+    //   - an exact DLL: "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll"    (matches just that file)
     //
-    // See CONFIG.md for a starter list for a typical Fika headless setup.
+    // See CONFIG.md for a full working example.
     "headlessIncludes": [
+        // Fika (Core + Headless.dll both live in this folder) and ModSync
+        "../BepInEx/plugins/Fika",
+        "../BepInEx/plugins/Corter-ModSync"   // ← add a comma here before uncommenting below
+
+        // Bot AI + behavior (example entries — add your own below)
+        // "../BepInEx/plugins/SAIN",
+        // "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll",
+        // "../BepInEx/plugins/DrakiaXYZ-Waypoints"
+    ],
+
+    //-----------------------------------------------------------------------
+
+    // ALLOWLIST for EscapeFromTarkov_Data/Managed DLL files.
+    //
+    // Some mods ship Unity assemblies that need to be placed in
+    // EscapeFromTarkov_Data/Managed/ on every player client. List the
+    // DLL filenames here (filename only — no folder path).
+    //
+    // The server reads from ../EscapeFromTarkov_Data/Managed/ but only serves
+    // the files you list here. This keeps it safe in both setups:
+    //   - Docker/Linux server: that folder is a staging area with ONLY mod DLLs
+    //   - Windows (host is also a player): that folder contains the full EFT
+    //     install — the allowlist prevents vanilla Unity DLLs from being synced
+    //
+    // On install:  if the file already exists on the client, the original is
+    //              backed up as <filename>.modsync-bak before being replaced.
+    // On removal:  if a .modsync-bak exists, the original is restored automatically.
+    //              If no backup was made (file was new), the file is deleted.
+    // See CONFIG.md for guidance on what belongs here.
+    "managedIncludes": [
+        // DynamicMaps example — remove or replace with your own mod's files:
+        // "Unity.VectorGraphics.dll",
+        // "Unity.InternalAPIEngineBridge.003.dll"
+    ],
+
+    //-----------------------------------------------------------------------
+
+    // ALLOWLIST - but for Fika headless clients.
+    //
+    // Headless runs the game simulation without the rendering stack, so Managed
+    // files are almost never needed there. Leave this empty unless a mod's install
+    // instructions specifically say it is required on headless.
+    "headlessManagedIncludes": [
     ]
 }

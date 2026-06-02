@@ -43,6 +43,17 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     }
 
     /// <summary>
+    /// Heuristic: is this syncpath the EscapeFromTarkov_Data/Managed folder?
+    /// The managedIncludes allowlist applies here for both player and headless clients
+    /// (each has its own list). Separator-normalized for cross-platform consistency.
+    /// </summary>
+    private static bool IsManagedScoped(string syncPathRaw)
+    {
+        var p = PathExt.UnixPath(syncPathRaw).TrimEnd('/');
+        return p == "../EscapeFromTarkov_Data/Managed" || p.StartsWith("../EscapeFromTarkov_Data/Managed/", StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Recursive directory walk. Yields the path of every file we'd consider syncing,
     /// applying the configured exclusions as we go. Also yields any empty directory's
     /// own path — clients need to recreate empty dirs on their side, so we represent
@@ -164,9 +175,10 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         {
             var perPath = new Dictionary<string, ModFile>();
 
-            // Decide once per syncpath whether the headless allowlist applies here.
-            // Enforced paths bypass the gate so ModSync itself can always self-update.
-            var applyAllowlist = isHeadless && !syncPath.enforced && IsPluginsScoped(syncPath.path);
+            // Decide once per syncpath which allowlist gates apply.
+            // Enforced paths bypass the headless plugins gate so ModSync itself can always self-update.
+            var applyHeadlessPluginsAllowlist = isHeadless && !syncPath.enforced && IsPluginsScoped(syncPath.path);
+            var applyManagedAllowlist = IsManagedScoped(syncPath.path);
 
             foreach (var file in GetFilesInDir(syncPath.path))
             {
@@ -176,7 +188,20 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
                 // Headless+plugins: file must match an allowlist entry to be served.
                 // Empty allowlist (admin hasn't configured headlessIncludes) means
                 // zero plugins reach headless — intentional "fail closed" default.
-                if (applyAllowlist && !config.IsHeadlessAllowed(file)) continue;
+                if (applyHeadlessPluginsAllowlist && !config.IsHeadlessAllowed(file)) continue;
+
+                // Managed folder: only serve filenames explicitly listed in managedIncludes
+                // (or headlessManagedIncludes for headless). Works by filename only so it's
+                // identical on Docker (staging folder, 2 files) and Windows (full Managed
+                // folder, 169 files) — the allowlist is what keeps vanilla DLLs out.
+                if (applyManagedAllowlist)
+                {
+                    var fileName = Path.GetFileName(file);
+                    var allowed = isHeadless
+                        ? config.IsHeadlessManagedAllowed(fileName)
+                        : config.IsManagedAllowed(fileName);
+                    if (!allowed) continue;
+                }
 
                 perPath[winFile] = await BuildModFileAsync(file);
                 filesHashed++;

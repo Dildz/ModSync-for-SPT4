@@ -3,7 +3,7 @@
 ModSync has two configuration surfaces:
 
 1. **Server** `config.jsonc` — what the server walks, what to never sync,
-   and what reaches a Fika headless install.
+   what reaches a Fika headless install, and which Unity Managed DLLs to push.
 2. **Each install's** `<game>/ModSync_Data/Exclusions.jsonc` — personal
    per-install opt-outs (player or headless).
 
@@ -14,13 +14,15 @@ header you can hand-edit without consulting docs.
 
 ## Server config (`config.jsonc`)
 
-Lives at `SPT/user/mods/Corter-ModSync/config.jsonc`. Three top-level keys:
+Lives at `SPT/user/mods/Corter-ModSync/config.jsonc`. Five top-level keys:
 
 ```jsonc
 {
-    "syncPaths":        [ ... ],   // folders to walk and serve
-    "exclusions":       [ ... ],   // universal denylist (every client)
-    "headlessIncludes": [ ... ]    // allowlist for Fika headless (plugins-scoped)
+    "syncPaths":              [ ... ],   // folders to walk and serve
+    "exclusions":             [ ... ],   // universal denylist (every client)
+    "headlessIncludes":       [ ... ],   // plugins allowlist for Fika headless
+    "managedIncludes":        [ ... ],   // EscapeFromTarkov_Data/Managed allowlist (players)
+    "headlessManagedIncludes":[ ... ]    // same, for Fika headless
 }
 ```
 
@@ -99,7 +101,7 @@ re-include everything you meant to keep out.
 
 - **A folder**: `../BepInEx/plugins/SAIN` matches the folder and everything
   inside it. Directory boundary check applies: `SAIN` does NOT match `SAINFoo`.
-- **An exact DLL**: `../BepInEx/plugins/Fika/Fika.Headless.dll` matches just
+- **An exact DLL**: `../BepInEx/plugins/DrakiaXYZ-BigBrain.dll` matches just
   that one file. Sibling files in the same folder are NOT pulled in.
 
 > **Why an allowlist (not a denylist) for headless?** Headless has no human
@@ -107,6 +109,56 @@ re-include everything you meant to keep out.
 > An allowlist is much shorter than its denylist equivalent (~20 entries vs.
 > hundreds of cosmetic mods), and you only have to update it when *headless's*
 > mod set changes, not when the player ecosystem moves.
+
+> **Trailing commas:** ModSync's config parser accepts trailing commas (the
+> `.jsonc` format). It is good practice to leave a trailing comma on the last
+> active entry so that uncommenting or adding a new line below it doesn't
+> accidentally produce malformed JSON:
+> ```jsonc
+> "headlessIncludes": [
+>     "../BepInEx/plugins/Fika",
+>     "../BepInEx/plugins/Corter-ModSync",   // ← trailing comma is fine here
+>
+>     // "../BepInEx/plugins/SAIN",           // safe to uncomment — comma already present above
+> ]
+> ```
+
+### `managedIncludes`
+
+**Allowlist** for files inside `EscapeFromTarkov_Data/Managed/`. Some mods
+ship Unity assemblies that must be placed in that folder on every player
+client (e.g. DynamicMaps). List the **filenames only** — no folder path.
+
+The server reads from `../EscapeFromTarkov_Data/Managed/` but only serves
+the files you explicitly list here. This makes it safe in both setups:
+
+- **Docker/Linux server:** that folder is a staging area containing only
+  the mod DLLs you placed there — nothing vanilla.
+- **Windows (host is also a player):** that folder contains the full EFT
+  install (169+ Unity DLLs). The allowlist prevents vanilla files from
+  being synced to other clients.
+
+**Client backup behaviour:**
+- **On install:** if the file already exists on the client, it is backed up
+  as `<filename>.modsync-bak` before being replaced.
+- **On removal** (entry deleted from config, server restarted): if a
+  `.modsync-bak` exists, the original is restored automatically. If no
+  backup was made (the file was new — not present in vanilla), it is deleted.
+
+```jsonc
+// DynamicMaps example:
+"managedIncludes": [
+    "Unity.VectorGraphics.dll",
+    "Unity.InternalAPIEngineBridge.003.dll"
+]
+```
+
+### `headlessManagedIncludes`
+
+Same allowlist as `managedIncludes` but applied only to Fika headless
+clients. **Default empty** — headless runs the game simulation without the
+rendering stack, so Managed DLLs are almost never needed there. Only add
+entries if a mod's install instructions specifically require it on headless.
 
 ---
 
@@ -181,35 +233,47 @@ Paths are written game-root-relative with forward slashes.
 ## Setting up a Fika headless install
 
 1. **On the server**, populate `headlessIncludes` in `config.jsonc` with the
-   plugins your headless needs. Starter list for a typical bot-focused
-   headless (adjust to your mod set):
+   plugins your headless needs. Below is a full working example — adjust to
+   your own mod set:
 
    ```jsonc
    "headlessIncludes": [
-       // Fika components — Fika.Core for protocol, Fika.Headless for host
+       // Fika (Core + Headless.dll both live in this folder) and ModSync
        "../BepInEx/plugins/Fika",
+       "../BepInEx/plugins/Corter-ModSync",
 
        // Bot AI + behavior
        "../BepInEx/plugins/SAIN",
        "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll",
        "../BepInEx/plugins/DrakiaXYZ-Waypoints",
-       "../BepInEx/plugins/QuestingBots",
-       "../BepInEx/plugins/MoreBotsAPI",
 
-       // Bot-affecting gameplay
+       // Bot gameplay tweaks
        "../BepInEx/plugins/DontShootTheBus.dll",
        "../BepInEx/plugins/NerfBotGrenades.dll",
        "../BepInEx/plugins/Shibdib.SniperBros.dll",
-       "../BepInEx/plugins/skwizzy.LootingBots.dll",
 
-       // Networking / patcher dependencies
+       // Misc gameplay + raid content
+       "../BepInEx/plugins/acidphantasm-temporaryfixes",
+       "../BepInEx/plugins/BlackDiv",
+       "../BepInEx/plugins/MergeConsumables",
+       "../BepInEx/plugins/RUAFComeHome",
+       "../BepInEx/plugins/tacticaltoaster-untargohome",
+       "../BepInEx/plugins/Terkoiz.FlareEventNotifier.dll",
+       "../BepInEx/plugins/UseItemsFromAnywhere.dll",
+
+       // Bundle / CRC loader helpers (raid load path)
+       "../BepInEx/plugins/s8_SPT_LoadBundleEvenFaster",
+       "../BepInEx/plugins/s8_SPT_PatchCRC32",
+
+       // Networking / interop libs
        "../BepInEx/plugins/Tyfon.UIFixes.dll",
        "../BepInEx/plugins/Tyfon.UIFixes.Net.dll",
-       "../BepInEx/plugins/UnityToolkit",
 
-       // WTT shared content + cosmetics worn in-raid (visible to clients)
+       // Worn cosmetics visible to other players in raid
        "../BepInEx/plugins/7Bpencil.WeaponCamoAndStickers",
-       "../BepInEx/plugins/BlackDiv",
+       "../BepInEx/plugins/acidphantasm-armbandsforall",
+
+       // WTT content libs
        "../BepInEx/plugins/WTT-ArmoryClient",
        "../BepInEx/plugins/WTT-ClientCommonLib",
        "../BepInEx/plugins/WTT-ContentBackportClient",
@@ -233,19 +297,28 @@ in the Fika Discord.
 1. **Server-only mod** (lives in `user/mods/`, no BepInEx component)?
    → Don't list anywhere. ModSync never syncs `user/mods/`.
 
-2. **BepInEx mod the headless needs to run raids properly** (bot AI,
+2. **BepInEx mod every player needs?**
+   → It syncs automatically via `syncPaths`. No config needed.
+
+3. **BepInEx mod the headless needs to run raids properly** (bot AI,
    pathfinding, networking, server-driven gameplay)?
    → Add to `headlessIncludes` on the server.
 
-3. **BepInEx mod that's purely client-facing** (HUD, UI overlays, visual
+4. **BepInEx mod that's purely client-facing** (HUD, UI overlays, visual
    effects, item info, hotkeys)?
    → Don't list anywhere — players get it by default, headless skips it
    because it's not in `headlessIncludes`.
 
-4. **A particular player doesn't want a particular mod?**
+5. **Mod that ships Unity assemblies into `EscapeFromTarkov_Data/Managed/`?**
+   → Add the DLL filenames to `managedIncludes`. Place the DLL files in
+   `../EscapeFromTarkov_Data/Managed/` on the server (a staging folder on
+   Docker, or the existing EFT folder on Windows — the allowlist keeps
+   vanilla files out either way).
+
+6. **A particular player doesn't want a particular mod?**
    → That player adds it to their own `Exclusions.jsonc`.
 
-5. **`Fika.Headless.dll`** → already in `exclusions` by default. Don't add
+7. **`Fika.Headless.dll`** → already in `exclusions` by default. Don't add
    anywhere else.
 
 ---

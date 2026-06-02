@@ -7,6 +7,11 @@ namespace ModSync.Updater;
 
 public static class Updater
 {
+    // True if the path (absolute or relative) is inside EscapeFromTarkov_Data/Managed/.
+    // Normalizes separators so it matches on Windows regardless of how the path was built.
+    private static bool IsInManagedFolder(string path) =>
+        path.Replace('\\', '/').Contains("EscapeFromTarkov_Data/Managed/", StringComparison.OrdinalIgnoreCase);
+
     private static void MoveFilesRecursively(string source, string target) => MoveFilesRecursively(new DirectoryInfo(source), new DirectoryInfo(target));
 
     private static void MoveFilesRecursively(DirectoryInfo source, DirectoryInfo target)
@@ -15,8 +20,17 @@ public static class Updater
             MoveFilesRecursively(dir, target.CreateSubdirectory(dir.Name));
         foreach (var file in source.GetFiles())
         {
-            Logger.Log($"Copying file: {Path.Combine(target.FullName, file.Name)}");
-            file.MoveTo(Path.Combine(target.FullName, file.Name), true);
+            var destPath = Path.Combine(target.FullName, file.Name);
+
+            // Back up any existing Managed file before overwriting.
+            if (File.Exists(destPath) && IsInManagedFolder(destPath))
+            {
+                Logger.Log($"Backing up: {destPath}");
+                File.Copy(destPath, destPath + ".modsync-bak", overwrite: true);
+            }
+
+            Logger.Log($"Copying file: {destPath}");
+            file.MoveTo(destPath, true);
         }
     }
 
@@ -48,7 +62,14 @@ public static class Updater
             if (!File.Exists(file))
                 continue;
 
-            if (File.Exists(file))
+            var bakPath = file + ".modsync-bak";
+            if (IsInManagedFolder(file) && File.Exists(bakPath))
+            {
+                // Restore the backed-up original instead of deleting.
+                Logger.Log($"Restoring backup: {file}");
+                File.Move(bakPath, file, overwrite: true);
+            }
+            else
             {
                 Logger.Log($"Deleting file: {file}");
                 File.Delete(file);

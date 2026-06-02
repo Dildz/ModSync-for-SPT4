@@ -19,11 +19,15 @@ namespace ModSync.Server;
 public class Config(
     List<SyncPath> syncPaths,
     List<string> exclusions,
-    List<string> headlessIncludes)
+    List<string> headlessIncludes,
+    List<string> managedIncludes,
+    List<string> headlessManagedIncludes)
 {
     public readonly List<SyncPath> SyncPaths = syncPaths;
     public readonly List<string> Exclusions = exclusions;
     public readonly List<string> HeadlessIncludes = headlessIncludes;
+    public readonly List<string> ManagedIncludes = managedIncludes;
+    public readonly List<string> HeadlessManagedIncludes = headlessManagedIncludes;
 
     // Compile globs once at construction — cheaper than recompiling per file check.
     // `readonly` here means the reference can't change, but the contents (regex internal
@@ -34,6 +38,15 @@ public class Config(
     // supported (by design; see config comments) so there's nothing to compile.
     private readonly List<string> _normalizedHeadlessIncludes =
         headlessIncludes.ConvertAll(e => PathExt.UnixPath(e).TrimEnd('/'));
+
+    // managedIncludes entries are plain filenames (e.g. "Unity.VectorGraphics.dll").
+    // Store as a case-insensitive set — Windows filesystems are case-insensitive and
+    // we want "unity.vectorgraphics.dll" to match regardless of how the admin typed it.
+    private readonly HashSet<string> _managedIncludesSet =
+        new(managedIncludes, StringComparer.OrdinalIgnoreCase);
+
+    private readonly HashSet<string> _headlessManagedIncludesSet =
+        new(headlessManagedIncludes, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>True if filePath matches any of the configured exclusion globs.</summary>
     public bool IsExcluded(string filePath)
@@ -59,6 +72,17 @@ public class Config(
         return _normalizedHeadlessIncludes.Exists(entry =>
             normalized == entry || normalized.StartsWith(entry + "/", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// True if the given filename appears in managedIncludes. Callers pass
+    /// Path.GetFileName(filePath) — the allowlist is filename-only, not full path,
+    /// so it works identically whether the server's Managed folder is a Docker
+    /// staging directory (2 files) or a full Windows EFT install (169 files).
+    /// </summary>
+    public bool IsManagedAllowed(string fileName) => _managedIncludesSet.Contains(fileName);
+
+    /// <summary>Same as IsManagedAllowed but for headless clients.</summary>
+    public bool IsHeadlessManagedAllowed(string fileName) => _headlessManagedIncludesSet.Contains(fileName);
 }
 
 /// <summary>
@@ -74,6 +98,8 @@ public record RawConfig
     [JsonPropertyName("syncPaths")] public List<JsonElement> SyncPaths { get; init; } = [];
     [JsonPropertyName("exclusions")] public List<string> Exclusions { get; init; } = [];
     [JsonPropertyName("headlessIncludes")] public List<string> HeadlessIncludes { get; init; } = [];
+    [JsonPropertyName("managedIncludes")] public List<string> ManagedIncludes { get; init; } = [];
+    [JsonPropertyName("headlessManagedIncludes")] public List<string> HeadlessManagedIncludes { get; init; } = [];
 }
 
 /// <summary>
@@ -86,10 +112,12 @@ public record RawConfig
 public class ConfigUtil(ISptLogger<ConfigUtil> logger)
 {
     /// <summary>
-    /// Default config written to disk on first run. Three top-level keys:
-    ///   • syncPaths        — folders the server walks and offers
-    ///   • exclusions       — universal denylist (every client, player and headless)
-    ///   • headlessIncludes — allowlist scoped to BepInEx/plugins for Fika headless clients
+    /// Default config written to disk on first run. Five top-level keys:
+    ///   • syncPaths              — folders the server walks and offers
+    ///   • exclusions             — universal denylist (every client, player and headless)
+    ///   • headlessIncludes       — allowlist scoped to BepInEx/plugins for Fika headless clients
+    ///   • managedIncludes        — allowlist for EscapeFromTarkov_Data/Managed DLLs (players)
+    ///   • headlessManagedIncludes — same, for Fika headless
     ///
     /// Per-player opt-outs live CLIENT-SIDE in each install's
     /// <c>&lt;game&gt;/ModSync_Data/Exclusions.jsonc</c> — admins don't manage those.
@@ -111,7 +139,9 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 "../BepInEx/config"
             ],
 
-            // Skipped on EVERY sync (players AND headless alike).
+            //-----------------------------------------------------------------------
+
+            // Paths ignored by ModSync (players AND headless alike).
             // Use for SPT internals, per-instance state files mods don't want
             // overwritten, and the universal `.nosync` opt-out pattern.
             // See CONFIG.md for guidance on what belongs here.
@@ -134,6 +164,8 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 "**/.git"
             ],
 
+            //-----------------------------------------------------------------------
+
             // ALLOWLIST for Fika headless clients, scoped to ../BepInEx/plugins ONLY.
             // patchers + config flow through to headless unfiltered (the universal
             // `exclusions` above still applies).
@@ -146,11 +178,46 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             // Don't use globs like "*.dll" here. The whole point of an allowlist is
             // being deliberate about what reaches headless; a careless glob can
             // accidentally re-include everything you meant to keep out.
-            //   - a folder:     "../BepInEx/plugins/SAIN"             (matches the folder + contents)
-            //   - an exact DLL: "../BepInEx/plugins/Foo/Bar.dll"      (matches just that file)
+            //   - a folder:     "../BepInEx/plugins/SAIN"                      (matches the folder + contents)
+            //   - an exact DLL: "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll"    (matches just that file)
             //
-            // See CONFIG.md for a starter list for a typical Fika headless setup.
+            // See CONFIG.md for a full working example.
             "headlessIncludes": [
+            ],
+
+            //-----------------------------------------------------------------------
+
+            // ALLOWLIST for EscapeFromTarkov_Data/Managed DLL files.
+            //
+            // Some mods ship Unity assemblies that need to be placed in
+            // EscapeFromTarkov_Data/Managed/ on every player client. List the
+            // DLL filenames here (filename only — no folder path).
+            //
+            // The server reads from ../EscapeFromTarkov_Data/Managed/ but only serves
+            // the files you list here. This keeps it safe in both setups:
+            //   - Docker/Linux server: that folder is a staging area with ONLY mod DLLs
+            //   - Windows (host is also a player): that folder contains the full EFT
+            //     install — the allowlist prevents vanilla Unity DLLs from being synced
+            //
+            // On install:  if the file already exists on the client, the original is
+            //              backed up as <filename>.modsync-bak before being replaced.
+            // On removal:  if a .modsync-bak exists, the original is restored automatically.
+            //              If no backup was made (file was new), the file is deleted.
+            // See CONFIG.md for guidance on what belongs here.
+            "managedIncludes": [
+                // DynamicMaps example — remove or replace with your own mod's files:
+                // "Unity.VectorGraphics.dll",
+                // "Unity.InternalAPIEngineBridge.003.dll"
+            ],
+
+            //-----------------------------------------------------------------------
+
+            // ALLOWLIST - but for Fika headless clients.
+            //
+            // Headless runs the game simulation without the rendering stack, so Managed
+            // files are almost never needed there. Leave this empty unless a mod's install
+            // instructions specifically say it is required on headless.
+            "headlessManagedIncludes": [
             ]
         }
         """;
@@ -337,6 +404,17 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 enabled: true, enforced: true, silent: true, restartRequired: true),
         };
 
+        // Add the Managed syncpath only when at least one list is populated.
+        // Not enforced — players can opt out. restartRequired because replacing a Unity
+        // assembly takes effect only after EFT restarts.
+        if (raw.ManagedIncludes.Count > 0 || raw.HeadlessManagedIncludes.Count > 0)
+        {
+            builtins.Add(new SyncPath(
+                path: "../EscapeFromTarkov_Data/Managed",
+                name: "(Builtin) Managed Files",
+                enabled: true, enforced: false, silent: false, restartRequired: true));
+        }
+
         var userPaths = raw.SyncPaths.ConvertAll(BuildSyncPath);
 
         // Concatenate, then sort by descending path length so more-specific matches take precedence.
@@ -345,6 +423,6 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         allPaths.AddRange(userPaths);
         allPaths.Sort((a, b) => b.path.Length.CompareTo(a.path.Length));
 
-        return new Config(allPaths, raw.Exclusions, raw.HeadlessIncludes);
+        return new Config(allPaths, raw.Exclusions, raw.HeadlessIncludes, raw.ManagedIncludes, raw.HeadlessManagedIncludes);
     }
 }
