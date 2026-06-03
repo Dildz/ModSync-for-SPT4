@@ -59,23 +59,27 @@ jobs:
 
       - name: Stage release artifacts
         # Builds the directory tree users extract into their SPT install:
-        #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll        (BepInEx client plugin)
-        #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll.config (binding redirects)
-        #   <game>/SPT/user/mods/Corter-ModSync/ModSync.Server.dll          (server mod)
-        #   <game>/SPT/user/mods/Corter-ModSync/config.jsonc                (default config — edit before first run)
-        #   <game>/ModSync.Updater.exe                                      (single-file updater)
+        #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll              (BepInEx client plugin)
+        #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll.config       (binding redirects)
+        #   <game>/BepInEx/patchers/Corter-ModSync/Corter-ModSync.Patcher.dll     (preloader patcher)
+        #   <game>/SPT/user/mods/Corter-ModSync/ModSync.Server.dll                (server mod)
+        #   <game>/SPT/user/mods/Corter-ModSync/config.jsonc                      (default config — edit before first run)
+        #   <game>/ModSync.Updater.exe                                             (single-file updater)
         # User unzips into their game root and the right files end up in the right places.
-        # BepInEx scans plugins/ recursively, so the subfolder layout works seamlessly
-        # and keeps the plugins/ root cleaner.
+        # BepInEx scans plugins/ and patchers/ recursively, so subfolder layouts work seamlessly.
         shell: pwsh
         run: |
           $stage = "release-stage"
-          New-Item -ItemType Directory -Force -Path "$stage/BepInEx/plugins/Corter-ModSync" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$stage/SPT/user/mods/Corter-ModSync" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/BepInEx/plugins/Corter-ModSync"  | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/BepInEx/patchers/Corter-ModSync" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/SPT/user/mods/Corter-ModSync"    | Out-Null
 
           # Client plugin (bundled into its own subfolder)
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll"        "$stage/BepInEx/plugins/Corter-ModSync/"
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll.config" "$stage/BepInEx/plugins/Corter-ModSync/"
+
+          # Preloader patcher — applies PendingUpdates before plugin DLLs are loaded
+          Copy-Item "ModSync.Patcher/bin/Release/net472/Corter-ModSync.Patcher.dll" "$stage/BepInEx/patchers/Corter-ModSync/"
 
           # Server mod + default config (bundled so admins can edit before first run)
           Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT/user/mods/Corter-ModSync/"
@@ -103,3 +107,13 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-pre') || contains(github.ref_name, '-rc') }}
           # Auto-generate changelog from PR/commit history between this tag and the previous one.
           generate_release_notes: true
+          body: |
+            ## Changes
+
+            - **New: BepInEx preloader patcher** (`BepInEx/patchers/Corter-ModSync/`) — applies staged mod updates before plugin DLLs are loaded into memory, fixing the re-sync loop on headless clients (Docker/Linux and Windows headless)
+            - **Fix: headless infinite re-sync loop** — headless clients now quit cleanly after staging updates; the patcher applies them on the next boot
+
+            ## Upgrade notes
+
+            Unzip into your game root as usual. The patcher lands in `BepInEx/patchers/Corter-ModSync/` automatically.
+            ModSync will distribute it to headless clients on their next connection — no manual headless install needed.

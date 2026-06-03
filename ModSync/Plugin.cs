@@ -313,13 +313,11 @@ public class Plugin : BaseUnityPlugin
     {
         if (IsHeadless)
         {
-            // On Linux/Wine, Process.Start() with UseShellExecute=false exec()s the PE
-            // binary directly as a Linux process — it fails with ENOEXEC and the updater
-            // never runs. Apply pending updates in-process instead, then quit so Docker's
-            // restart loop brings EFT back up with the new files already in place.
-            Logger.LogInfo("ModSync: headless — applying pending updates in-process.");
-            try { ApplyPendingUpdatesInProcess(); }
-            catch (Exception e) { Logger.LogError($"ModSync: in-process apply failed: {e}"); }
+            // Plugin DLLs are already loaded into memory by the time this runs — attempting
+            // File.Copy(overwrite:true) throws IOException("File has a user-mapped section").
+            // Corter-ModSync.Patcher (BepInEx/patchers/) applies PendingUpdates at preloader
+            // stage on the next boot, before any DLLs are locked, so just quit here.
+            Logger.LogInfo("ModSync: headless — update staged, restarting for patcher to apply.");
             Application.Quit();
             return;
         }
@@ -337,67 +335,6 @@ public class Plugin : BaseUnityPlugin
         var updaterProcess = new Process { StartInfo = updaterStartInfo };
         updaterProcess.Start();
         Application.Quit();
-    }
-
-    // True if the game-root-relative path is inside EscapeFromTarkov_Data/Managed/.
-    // Normalizes separators so it works on both Windows (\) and Linux/Wine (/).
-    private static bool IsInManagedFolder(string relPath) =>
-        relPath.Replace('\\', '/').StartsWith("EscapeFromTarkov_Data/Managed/", StringComparison.OrdinalIgnoreCase);
-
-    private void ApplyPendingUpdatesInProcess()
-    {
-        var gameDir = Directory.GetCurrentDirectory();
-
-        if (Directory.Exists(PENDING_UPDATES_DIR))
-        {
-            foreach (var src in Directory.EnumerateFiles(PENDING_UPDATES_DIR, "*", SearchOption.AllDirectories))
-            {
-                var rel = src.Substring(PENDING_UPDATES_DIR.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                var dest = Path.Combine(gameDir, rel);
-                Directory.CreateDirectory(Path.GetDirectoryName(dest));
-
-                // Back up any existing Managed file before overwriting — lets us restore
-                // the original (vanilla or previous mod version) if the entry is later
-                // removed from managedIncludes. No-op if file didn't exist (Docker/new install).
-                if (IsInManagedFolder(rel) && File.Exists(dest))
-                {
-                    File.Copy(dest, dest + ".modsync-bak", overwrite: true);
-                    Logger.LogInfo($"ModSync: backed up {rel}");
-                }
-
-                File.Copy(src, dest, overwrite: true);
-                Logger.LogInfo($"ModSync: applied {rel}");
-            }
-            Directory.Delete(PENDING_UPDATES_DIR, true);
-            Logger.LogInfo("ModSync: all pending updates applied.");
-        }
-
-        if (File.Exists(REMOVED_FILES_PATH))
-        {
-            var toRemove = Json.Deserialize<List<string>>(VFS.ReadTextFile(REMOVED_FILES_PATH));
-            foreach (var rel in toRemove)
-            {
-                var fullPath = Path.Combine(gameDir, rel);
-                if (!File.Exists(fullPath))
-                    continue;
-
-                var bakPath = fullPath + ".modsync-bak";
-                if (IsInManagedFolder(rel) && File.Exists(bakPath))
-                {
-                    // Restore the backed-up original instead of deleting.
-                    // File.Move with overwrite isn't available in net472 — copy then delete.
-                    File.Copy(bakPath, fullPath, overwrite: true);
-                    File.Delete(bakPath);
-                    Logger.LogInfo($"ModSync: restored {rel}");
-                }
-                else
-                {
-                    File.Delete(fullPath);
-                    Logger.LogInfo($"ModSync: removed {rel}");
-                }
-            }
-            File.Delete(REMOVED_FILES_PATH);
-        }
     }
 
     private IEnumerator StartPlugin()
