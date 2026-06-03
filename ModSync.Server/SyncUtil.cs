@@ -63,7 +63,10 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     /// `yield return` (vs returning a list): lazy enumeration. Each item is produced on
     /// demand as the caller iterates. Memory stays flat regardless of how big the tree is.
     /// </summary>
-    public IEnumerable<string> GetFilesInDir(string dir)
+    // skipExclusions=true is used for the headless+plugins scope, where headlessIncludes
+    // is the sole gate and intentionally overrides the global exclusions list. For all
+    // other scopes (players, headless patchers/config) exclusions apply as normal.
+    public IEnumerable<string> GetFilesInDir(string dir, bool skipExclusions = false)
     {
         // Three early-exit cases, in order:
         //   1) Path doesn't exist at all (likely a stale syncpath) — warn and skip.
@@ -77,7 +80,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 
         if (File.Exists(dir))
         {
-            if (config.IsExcluded(dir)) yield break;
+            if (!skipExclusions && config.IsExcluded(dir)) yield break;
             yield return dir;
             yield break;
         }
@@ -88,7 +91,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         // entry from the OS at a time, doesn't materialize the full list.
         foreach (var file in Directory.EnumerateFiles(dir))
         {
-            if (config.IsExcluded(file)) continue;
+            if (!skipExclusions && config.IsExcluded(file)) continue;
             yield return file;
             hasContents = true;
         }
@@ -96,9 +99,9 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         // Subdirectories — recurse into each.
         foreach (var subDir in Directory.EnumerateDirectories(dir))
         {
-            if (config.IsExcluded(subDir)) continue;
+            if (!skipExclusions && config.IsExcluded(subDir)) continue;
 
-            foreach (var x in GetFilesInDir(subDir))
+            foreach (var x in GetFilesInDir(subDir, skipExclusions))
             {
                 yield return x;
                 hasContents = true;
@@ -156,11 +159,12 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     /// Files seen across multiple syncpaths only get hashed once (the first time we
     /// encounter them). Matches corter's dedup-by-set behavior in sync.ts.
     ///
-    /// <paramref name="isHeadless"/> — when true, the headlessIncludes allowlist gates
-    /// every file under BepInEx/plugins. Files in patchers/config (and any non-plugins
-    /// syncpath) flow through filtered only by the universal exclusions. Enforced
-    /// syncpaths (e.g. the built-in Corter-ModSync plugin) bypass the allowlist so the
-    /// mod itself can always self-update on headless.
+    /// <paramref name="isHeadless"/> — when true, the headlessIncludes allowlist is the
+    /// sole gate for BepInEx/plugins: exclusions are bypassed so that files excluded from
+    /// players (e.g. Fika.Headless.dll) can still reach headless via the allowlist.
+    /// Files in patchers/config (and any non-plugins syncpath) are still filtered by the
+    /// universal exclusions. Enforced syncpaths bypass the allowlist so ModSync itself can
+    /// always self-update on headless.
     /// </summary>
     public async Task<Dictionary<string, Dictionary<string, ModFile>>> HashModFilesAsync(
         IEnumerable<SyncPath> syncPaths,
@@ -180,14 +184,18 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
             var applyHeadlessPluginsAllowlist = isHeadless && !syncPath.enforced && IsPluginsScoped(syncPath.path);
             var applyManagedAllowlist = IsManagedScoped(syncPath.path);
 
-            foreach (var file in GetFilesInDir(syncPath.path))
+            // For headless+plugins: skip exclusions in the walk — headlessIncludes is the
+            // sole gate and is designed to override exclusions (e.g. Fika.Headless.dll is
+            // in exclusions to block players, but headlessIncludes lets it reach headless).
+            foreach (var file in GetFilesInDir(syncPath.path, skipExclusions: applyHeadlessPluginsAllowlist))
             {
                 var winFile = PathExt.WinPath(file);
                 if (!seen.Add(winFile)) continue;
 
-                // Headless+plugins: file must match an allowlist entry to be served.
-                // Empty allowlist (admin hasn't configured headlessIncludes) means
-                // zero plugins reach headless — intentional "fail closed" default.
+                // Headless+plugins: headlessIncludes is the sole filter — exclusions are
+                // intentionally bypassed above so that files like Fika.Headless.dll can be
+                // excluded from players yet still reach headless via the allowlist.
+                // Empty allowlist means zero plugins reach headless — intentional "fail closed".
                 if (applyHeadlessPluginsAllowlist && !config.IsHeadlessAllowed(file)) continue;
 
                 // Managed folder: only serve filenames explicitly listed in managedIncludes
