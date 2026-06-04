@@ -10,7 +10,6 @@
 
   <ItemGroup>
     <PackageReference Include="BepInEx.Core" Version="5.*" />
-    <PackageReference Include="BepInEx.Preloader.Core" Version="5.*" />
   </ItemGroup>
 
   <!--

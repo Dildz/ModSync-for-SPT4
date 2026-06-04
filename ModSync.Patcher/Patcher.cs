@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using BepInEx;
-using Mono.Cecil;
+using BepInEx.Logging;
 using Newtonsoft.Json;
 
 namespace ModSync.Patcher;
@@ -14,24 +13,22 @@ namespace ModSync.Patcher;
 /// solving the "File has a user-mapped section" IOException that occurs when the plugin
 /// tries to overwrite loaded DLLs in-process after downloading updates.
 ///
-/// Uses BasePatcherPlugin (BepInEx 5.4.21+ plugin-style API). Patch() is a no-op —
-/// we only use Finalizer() which runs after all assembly patching is complete.
+/// BepInEx 5.4.21+ discovers patchers via a static TargetDLLs *property* (get_TargetDLLs),
+/// not the older static method. Finish() is the post-patching lifecycle hook.
 /// </summary>
-[PatcherPluginInfo("com.corter.modsync.patcher", "ModSync Patcher", "0.12.3")]
-public class ModSyncPatcher : BasePatcherPlugin
+public static class Patcher
 {
+    private static readonly ManualLogSource Log = Logger.CreateLogSource("ModSync.Patcher");
+
     private static readonly string PendingUpdatesDir =
         Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data", "PendingUpdates");
     private static readonly string RemovedFilesPath =
         Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data", "RemovedFiles.json");
 
-    // Nominally targets Assembly-CSharp so BepInEx registers us and calls Finalizer().
-    public override IEnumerable<string> TargetDLLs { get; } = new[] { "Assembly-CSharp.dll" };
+    // Property (not method) — BepInEx 5.4.21+ looks for get_TargetDLLs via reflection.
+    public static IEnumerable<string> TargetDLLs { get; } = new[] { "Assembly-CSharp.dll" };
 
-    // No-op — we only need the Finalizer() hook, not to patch any assemblies.
-    public override void Patch(AssemblyDefinition assembly) { }
-
-    public override void Finalizer()
+    public static void Finish()
     {
         ApplyPending();
         RemoveDeleted();
@@ -41,7 +38,7 @@ public class ModSyncPatcher : BasePatcherPlugin
     private static bool IsInManagedFolder(string relPath) =>
         relPath.Replace('\\', '/').StartsWith("EscapeFromTarkov_Data/Managed/", StringComparison.OrdinalIgnoreCase);
 
-    private void ApplyPending()
+    private static void ApplyPending()
     {
         if (!Directory.Exists(PendingUpdatesDir))
             return;
@@ -62,16 +59,16 @@ public class ModSyncPatcher : BasePatcherPlugin
                 if (IsInManagedFolder(rel) && File.Exists(dest))
                 {
                     File.Copy(dest, dest + ".modsync-bak", overwrite: true);
-                    Logger.LogInfo($"Backed up {rel}");
+                    Log.LogInfo($"Backed up {rel}");
                 }
 
                 File.Copy(src, dest, overwrite: true);
-                Logger.LogInfo($"Applied {rel}");
+                Log.LogInfo($"Applied {rel}");
                 applied++;
             }
             catch (Exception e)
             {
-                Logger.LogWarning($"Skipped {rel}: {e.Message}");
+                Log.LogWarning($"Skipped {rel}: {e.Message}");
                 skipped++;
             }
         }
@@ -79,15 +76,15 @@ public class ModSyncPatcher : BasePatcherPlugin
         if (skipped == 0)
         {
             Directory.Delete(PendingUpdatesDir, recursive: true);
-            Logger.LogInfo($"All {applied} pending update(s) applied.");
+            Log.LogInfo($"All {applied} pending update(s) applied.");
         }
         else
         {
-            Logger.LogWarning($"Applied {applied}, skipped {skipped} — PendingUpdates kept for next boot.");
+            Log.LogWarning($"Applied {applied}, skipped {skipped} — PendingUpdates kept for next boot.");
         }
     }
 
-    private void RemoveDeleted()
+    private static void RemoveDeleted()
     {
         if (!File.Exists(RemovedFilesPath))
             return;
@@ -101,7 +98,7 @@ public class ModSyncPatcher : BasePatcherPlugin
         }
         catch (Exception e)
         {
-            Logger.LogError($"Could not read RemovedFiles.json: {e.Message}");
+            Log.LogError($"Could not read RemovedFiles.json: {e.Message}");
             return;
         }
 
@@ -116,12 +113,12 @@ public class ModSyncPatcher : BasePatcherPlugin
             {
                 File.Copy(bakPath, fullPath, overwrite: true);
                 File.Delete(bakPath);
-                Logger.LogInfo($"Restored {rel}");
+                Log.LogInfo($"Restored {rel}");
             }
             else
             {
                 File.Delete(fullPath);
-                Logger.LogInfo($"Removed {rel}");
+                Log.LogInfo($"Removed {rel}");
             }
         }
 
