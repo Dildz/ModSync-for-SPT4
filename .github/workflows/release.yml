@@ -61,7 +61,7 @@ jobs:
         # Builds the directory tree users extract into their SPT install:
         #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll              (BepInEx client plugin)
         #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll.config       (binding redirects)
-        #   <game>/BepInEx/patchers/Corter-ModSync/Corter-ModSync.Patcher.dll     (preloader patcher)
+        #   <game>/BepInEx/patchers/Corter-ModSync-Prepatch.dll                      (preloader patcher)
         #   <game>/SPT/user/mods/Corter-ModSync/ModSync.Server.dll                (server mod)
         #   <game>/SPT/user/mods/Corter-ModSync/config.jsonc                      (default config — edit before first run)
         #   <game>/ModSync.Updater.exe                                             (single-file updater)
@@ -71,7 +71,7 @@ jobs:
         run: |
           $stage = "release-stage"
           New-Item -ItemType Directory -Force -Path "$stage/BepInEx/plugins/Corter-ModSync"  | Out-Null
-          New-Item -ItemType Directory -Force -Path "$stage/BepInEx/patchers/Corter-ModSync" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/BepInEx/patchers"               | Out-Null
           New-Item -ItemType Directory -Force -Path "$stage/SPT/user/mods/Corter-ModSync"    | Out-Null
 
           # Client plugin (bundled into its own subfolder)
@@ -79,7 +79,7 @@ jobs:
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll.config" "$stage/BepInEx/plugins/Corter-ModSync/"
 
           # Preloader patcher — applies PendingUpdates before plugin DLLs are loaded
-          Copy-Item "ModSync.Patcher/bin/Release/net472/Corter-ModSync.Patcher.dll" "$stage/BepInEx/patchers/Corter-ModSync/"
+          Copy-Item "ModSync.Patcher/bin/Release/net472/Corter-ModSync-Prepatch.dll" "$stage/BepInEx/patchers/"
 
           # Server mod + default config (bundled so admins can edit before first run)
           Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT/user/mods/Corter-ModSync/"
@@ -110,12 +110,12 @@ jobs:
           body: |
             ## Changes
 
-            - **New: BepInEx preloader patcher** (`BepInEx/patchers/Corter-ModSync/`) — applies staged mod updates before plugin DLLs are loaded into memory, fixing the re-sync loop on headless clients (Docker/Linux and Windows headless)
+            - **New: BepInEx preloader patcher** (`BepInEx/patchers/Corter-ModSync-Prepatch.dll`) — applies staged mod updates before plugin DLLs are loaded into memory, fixing the re-sync loop on headless clients (Docker/Linux and Windows headless)
             - **Fix: headless infinite re-sync loop** — headless clients now quit cleanly after staging updates; the patcher applies them on the next boot
             - **Fix: `headlessIncludes` now overrides global exclusions** — files in both `exclusions` and `headlessIncludes` (e.g. `Fika.Headless.dll`) now correctly reach headless clients as intended
             - **Fix: preloader patcher now correctly activates** — the patcher now properly registers with BepInEx so its `Finish()` hook is called on every boot
 
             ## Upgrade notes
 
-            Unzip into your game root as usual. The patcher lands in `BepInEx/patchers/Corter-ModSync/` automatically.
+            Unzip into your game root as usual. The patcher lands in `BepInEx/patchers/` automatically.
             ModSync will distribute it to headless clients on their next connection — no manual headless install needed.
