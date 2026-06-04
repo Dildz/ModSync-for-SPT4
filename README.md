@@ -44,12 +44,11 @@ This project allows clients to easily add/update/remove mods, keeping them in sy
 
 ### Installation
 
-> The ModSync Updater (client-only) requires the
-> [.NET 9.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/9.0).
-> If you use the SPT launcher, you'll have it; headless clients may need to install it manually.
+> The ModSync Updater requires the [.NET 9.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/9.0).
+> The SPT launcher bundles it — if you installed SPT manually, make sure it's installed.
 
 1. Download the latest version of the mod from the [GitHub Releases](https://github.com/Dildz/ModSync-for-SPT4.0/releases) page
-2. Extract into your SPT folder like any other mod
+2. Extract into your **game root** (the folder containing `EscapeFromTarkov.exe`) — the zip contains both `BepInEx/` and `SPT/` directories that land in the right places automatically
 3. Start the server
 
 > [!NOTE]
@@ -75,9 +74,12 @@ and different modes of operation.
 - [x] Initial release
 - [x] Super nifty GUI for notifying user of mod changes and monitoring download progress
 - [x] Ability to exclude files/folders from syncing from both client and server
-- [x] Custom folder sync support (May be useful for cached bundles? or mods that add files places that aren't BepInEx/plugins, BepInEx/config, or user/mods)
+- [x] Custom folder sync support (BepInEx/plugins, BepInEx/patchers, BepInEx/config, and custom paths)
 - [x] Maybe cooler progress bar/custom UI (low priority)
-- [x] External updater to prevent file-in-use issues
-- [ ] Allow user to upload their local mods folders to host. (Needs some form of authorization, could be cool though)
-- [ ] Buttons to sync from the BepInEx config menu (F12)
+- [x] External updater to prevent file-in-use issues on Windows
+- [x] Headless client support — `headlessIncludes` allowlist serves only the plugins a headless instance needs
+- [x] BepInEx preloader patcher — applies staged updates on headless before any DLLs are locked, replacing the Updater for Docker/Linux
+- [x] `managedIncludes` — sync `EscapeFromTarkov_Data/Managed/` assemblies to players via filename allowlist
 - [x] Real tests?!? (low priority)
+- [ ] Allow user to upload their local mods folders to host (needs some form of authorization)
+- [ ] Buttons to sync from the BepInEx config menu (F12)
