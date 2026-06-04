@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx.Logging;
+using Mono.Cecil;
 using Newtonsoft.Json;
 
 namespace ModSync.Patcher;
@@ -13,8 +14,8 @@ namespace ModSync.Patcher;
 /// solving the "File has a user-mapped section" IOException that occurs when the plugin
 /// tries to overwrite loaded DLLs in-process after downloading updates.
 ///
-/// TargetDLLs() returns empty — we don't patch any assemblies, we just use the
-/// Finish() hook to run code at the end of the preloader stage.
+/// TargetDLLs() nominally targets Assembly-CSharp so BepInEx registers this plugin
+/// and calls Finish(). Patch() is a no-op — we only need the Finish() hook.
 /// </summary>
 public static class Patcher
 {
@@ -25,7 +26,11 @@ public static class Patcher
     private static readonly string RemovedFilesPath =
         Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data", "RemovedFiles.json");
 
-    public static IEnumerable<string> TargetDLLs() => Array.Empty<string>();
+    // BepInEx only registers a patcher (and calls Finish) if TargetDLLs is non-empty.
+    // We target Assembly-CSharp so BepInEx loads us; Patch() is a no-op.
+    public static IEnumerable<string> TargetDLLs() => new[] { "Assembly-CSharp.dll" };
+
+    public static void Patch(AssemblyDefinition assembly) { }
 
     public static void Finish()
     {

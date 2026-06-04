@@ -113,6 +113,7 @@ jobs:
             - **New: BepInEx preloader patcher** (`BepInEx/patchers/Corter-ModSync/`) — applies staged mod updates before plugin DLLs are loaded into memory, fixing the re-sync loop on headless clients (Docker/Linux and Windows headless)
             - **Fix: headless infinite re-sync loop** — headless clients now quit cleanly after staging updates; the patcher applies them on the next boot
             - **Fix: `headlessIncludes` now overrides global exclusions** — files in both `exclusions` and `headlessIncludes` (e.g. `Fika.Headless.dll`) now correctly reach headless clients as intended
+            - **Fix: preloader patcher now correctly activates** — the patcher now properly registers with BepInEx so its `Finish()` hook is called on every boot
 
             ## Upgrade notes
 
