@@ -59,18 +59,13 @@ This project allows clients to easily add/update/remove mods, keeping them in sy
 
 ## Configuration
 
-For information about modifying the ModSync config, see [the configuration page on the wiki](https://github.com/c-orter/ModSync/wiki/Configuration).
-
-> [!NOTE]
-> **SPT 4 path change.** Default syncPaths now use `../BepInEx/...` (note the `../`)
-> because the SPT 4 server runs from `<gameRoot>/SPT/` rather than the game root
-> directly. The upstream wiki still shows the SPT 3 (no-prefix) format.
+For information about modifying the ModSync config, see [the configuration page on the wiki](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/Configuration).
 
 ## Frequently Asked Questions
 
-Checkout some [frequently asked questions](https://github.com/c-orter/ModSync/wiki/FAQ) on the wiki!
+Checkout some [frequently asked questions](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/FAQ) on the wiki!
 
-## [How Sync Works](https://github.com/c-orter/ModSync/wiki/How-Sync-Works)
+## [How Sync Works](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/How-Sync-Works)
 
 If you are looking to understand how syncing works, take a look at the technical writeup on the wiki. It goes into detail on the different stages of the sync process
 and different modes of operation.
