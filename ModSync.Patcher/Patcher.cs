@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx.Logging;
+using Mono.Cecil;
 using Newtonsoft.Json;
 
 namespace ModSync.Patcher;
@@ -27,6 +28,9 @@ public static class Patcher
 
     // Property (not method) — BepInEx 5.4.21+ looks for get_TargetDLLs via reflection.
     public static IEnumerable<string> TargetDLLs { get; } = new[] { "Assembly-CSharp.dll" };
+
+    // Required by BepInEx 5.x — a class with no Patch methods is silently skipped (Finish never fires).
+    public static void Patch(AssemblyDefinition assembly) { }
 
     public static void Finish()
     {

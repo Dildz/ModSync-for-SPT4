@@ -10,6 +10,11 @@
 
   <ItemGroup>
     <PackageReference Include="BepInEx.Core" Version="5.*" />
+    <!--
+      Mono.Cecil ships in BepInEx/core/ — available at preloader stage.
+      Private="false": compile-time reference only, not copied to output.
+    -->
+    <PackageReference Include="Mono.Cecil" Version="0.11.*" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <!--
