@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx.Logging;
-using Mono.Cecil;
 using Newtonsoft.Json;
 
 namespace ModSync.Patcher;
@@ -27,10 +26,8 @@ public static class Patcher
         Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data", "RemovedFiles.json");
 
     // BepInEx only registers a patcher (and calls Finish) if TargetDLLs is non-empty.
-    // We target Assembly-CSharp so BepInEx loads us; Patch() is a no-op.
+    // We target Assembly-CSharp so BepInEx loads us. No Patch() needed — we only use Finish().
     public static IEnumerable<string> TargetDLLs() => new[] { "Assembly-CSharp.dll" };
-
-    public static void Patch(AssemblyDefinition assembly) { }
 
     public static void Finish()
     {
