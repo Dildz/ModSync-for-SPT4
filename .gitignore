@@ -9,3 +9,4 @@ coverage
 .vite
 **/*~
 .vscode
+graphify-out
