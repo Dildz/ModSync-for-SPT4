@@ -16,6 +16,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModSync.Server", "ModSync.S
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModSync.Patcher", "ModSync.Patcher\ModSync.Patcher.csproj", "{C2A1F3E4-5B6D-7E8F-9A0B-1C2D3E4F5A6B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModSync.Server.Tests", "ModSync.Server.Tests\ModSync.Server.Tests.csproj", "{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -98,6 +100,18 @@ Global
 		{C2A1F3E4-5B6D-7E8F-9A0B-1C2D3E4F5A6B}.Release|x64.Build.0 = Release|Any CPU
 		{C2A1F3E4-5B6D-7E8F-9A0B-1C2D3E4F5A6B}.Release|x86.ActiveCfg = Release|Any CPU
 		{C2A1F3E4-5B6D-7E8F-9A0B-1C2D3E4F5A6B}.Release|x86.Build.0 = Release|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Debug|x64.Build.0 = Debug|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Debug|x86.Build.0 = Debug|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Release|x64.ActiveCfg = Release|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Release|x64.Build.0 = Release|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Release|x86.ActiveCfg = Release|Any CPU
+		{B7D4E2F1-9C3A-4E5B-8F6D-2A1B3C4D5E6F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
