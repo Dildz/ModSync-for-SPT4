@@ -1,0 +1,37 @@
+# CI pipeline — runs on every push to SPT4.0.x and on pull requests targeting it.
+# Builds the solution and runs both test suites. No artifacts, no release.
+#
+# Uses a Windows runner to match the release pipeline (client targets net472).
+
+name: CI
+
+on:
+  push:
+    branches: ['SPT4.0.x']
+  pull_request:
+    branches: ['SPT4.0.x']
+
+jobs:
+  test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Run client tests
+        run: dotnet test ModSync.Tests/ModSync.Tests.csproj -c Release --no-build --nologo
+
+      - name: Run server tests
+        run: dotnet test ModSync.Server.Tests/ModSync.Server.Tests.csproj -c Release --no-build --nologo
