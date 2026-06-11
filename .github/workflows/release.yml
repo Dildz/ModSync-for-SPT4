@@ -110,15 +110,21 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-pre') || contains(github.ref_name, '-rc') }}
           # Auto-generate changelog from PR/commit history between this tag and the previous one.
           generate_release_notes: true
+          # !!! UPDATE THE BODY BELOW BEFORE TAGGING A NEW RELEASE !!!
+          # This text is baked into every release page verbatim — a stale body means the
+          # release ships with the PREVIOUS version's changelog (happened on v0.12.4).
           body: |
             ## Changes
 
-            - **New: BepInEx preloader patcher** (`BepInEx/patchers/Corter-ModSync-Prepatch.dll`) — applies staged mod updates before plugin DLLs are loaded into memory, fixing the re-sync loop on headless clients (Docker/Linux and Windows headless)
-            - **Fix: headless infinite re-sync loop** — headless clients now quit cleanly after staging updates; the patcher applies them on the next boot
-            - **Fix: `headlessIncludes` now overrides global exclusions** — files in both `exclusions` and `headlessIncludes` (e.g. `Fika.Headless.dll`) now correctly reach headless clients as intended
-            - **Fix: preloader patcher now correctly activates** — the patcher now properly registers with BepInEx so its `Finish()` hook is called on every boot
+            - **Patcher: per-file update apply** — each staged file is applied and cleared independently; one failed file no longer keeps the entire `PendingUpdates` folder stuck on every boot
+            - **Patcher: can now update itself** — loaded (locked) DLLs are renamed aside as `*.modsync-old` and replaced; leftovers are cleaned up automatically on the next boot
+            - **Patcher: already-current files are skipped** — staged files byte-identical to what's installed are discarded instead of re-applied every boot
+            - **Patcher: fault-tolerant file removal** — one failed deletion no longer aborts the remaining removals
+            - **New: persistent update log on headless** — the patcher logs to `ModSync_Data/ModSync.log` (same file the Windows Updater writes), surviving BepInEx's per-boot `LogOutput.log` overwrite
+            - **Fix: startup warning pointed to a log file that doesn't exist** — now points to `ModSync_Data/ModSync.log` on all platforms
 
             ## Upgrade notes
 
-            Unzip into your game root as usual. The patcher lands in `BepInEx/patchers/` automatically.
-            ModSync will distribute it to headless clients on their next connection — no manual headless install needed.
+            Unzip into your game root as usual.
+
+            **Upgrading an existing install:** the patcher moved from `BepInEx/patchers/Corter-ModSync/Corter-ModSync.Patcher.dll` to `BepInEx/patchers/Corter-ModSync-Prepatch.dll` (no subfolder). On the **server** — and any manually managed headless — delete the old `BepInEx/patchers/Corter-ModSync/` folder after upgrading, or clients will keep syncing the obsolete patcher back down. Synced clients clean it up automatically when *Delete removed files* is enabled.
