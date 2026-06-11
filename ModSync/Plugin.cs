@@ -22,7 +22,7 @@ namespace ModSync;
 using SyncPathFileList = Dictionary<string, List<string>>;
 using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 
-[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.3")]
+[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.4")]
 public class Plugin : BaseUnityPlugin
 {
     private static readonly string MODSYNC_DIR = Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data");
@@ -315,7 +315,7 @@ public class Plugin : BaseUnityPlugin
         {
             // Plugin DLLs are already loaded into memory by the time this runs — attempting
             // File.Copy(overwrite:true) throws IOException("File has a user-mapped section").
-            // Corter-ModSync.Patcher (BepInEx/patchers/) applies PendingUpdates at preloader
+            // Corter-ModSync-Prepatch (BepInEx/patchers/) applies PendingUpdates at preloader
             // stage on the next boot, before any DLLs are locked, so just quit here.
             Logger.LogInfo("ModSync: headless — update staged, restarting for patcher to apply.");
             Application.Quit();
@@ -340,9 +340,12 @@ public class Plugin : BaseUnityPlugin
     private IEnumerator StartPlugin()
     {
         cts = new CancellationTokenSource();
+        // Leftover update data at this point means the apply step couldn't finish
+        // (Updater on desktop, preloader patcher on headless). Both write to the same
+        // ModSync_Data/ModSync.log, so one message covers both platforms.
         if (Directory.Exists(PENDING_UPDATES_DIR) || File.Exists(REMOVED_FILES_PATH))
             Logger.LogWarning(
-                "ModSync found previous update. Updater may have failed, check the 'ModSync_Data/Updater.log' for details. Attempting to continue."
+                "ModSync found a previous update that could not be fully applied. Check 'ModSync_Data/ModSync.log' for details. Attempting to continue."
             );
 
         Logger.LogDebug("Fetching server version");
