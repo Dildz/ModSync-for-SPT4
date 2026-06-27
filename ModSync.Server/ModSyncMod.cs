@@ -122,6 +122,7 @@ public class ModSyncMod(
         var modVersion = new ModMetadata().Version.ToString();
         listener.Initialize(config, modVersion);
 
-        logger.Info($"Corter-ModSync: server mod loaded (v{modVersion}). Listening on /modsync/*.");
+        // Success → green, so the "we booted cleanly" banner is easy to spot in a busy console.
+        logger.Success($"Corter-ModSync: server mod loaded (v{modVersion}). Listening on /modsync/*.");
     }
 }

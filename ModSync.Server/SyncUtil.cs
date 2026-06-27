@@ -1,4 +1,5 @@
 using ModSync.Utility;
+using SPTarkov.Server.Core.Models.Logging;
 using SPTarkov.Server.Core.Models.Utils;
 
 namespace ModSync.Server;
@@ -219,7 +220,9 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         }
 
         var elapsedMs = (DateTime.UtcNow - startedAt).TotalMilliseconds;
-        logger.Info($"Corter-ModSync: hashed {filesHashed} files in {elapsedMs:F0}ms (headless={isHeadless}).");
+        // Gray → de-emphasise the routine per-request hash summary so it recedes behind the
+        // banner/warnings/errors rather than adding to the console noise.
+        logger.LogWithColor($"Corter-ModSync: hashed {filesHashed} files in {elapsedMs:F0}ms (headless={isHeadless}).", LogTextColor.Gray);
 
         return result;
     }
