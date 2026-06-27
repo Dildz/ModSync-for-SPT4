@@ -137,5 +137,13 @@ public class Migrator(string baseDir)
         {
             Plugin.Logger.LogWarning("Previous sync was made with a different version of the plugin. This may cause issues. Continuing...");
         }
+
+        // Record the version we just finished migrating to. The pre-0.9.0 branches above each
+        // write this themselves, but every >=0.9.0 path (same-minor patch bumps AND cross-minor
+        // upgrades like 0.10 -> 0.12) previously left Version.txt stale forever — so the plugin
+        // looked "older than the server" on every boot and re-warned. Writing it unconditionally
+        // here self-heals all of those. (The 0.0.0 / missing-data paths above return early after
+        // Cleanup already wrote it, so they don't reach this line.)
+        File.WriteAllText(VERSION_PATH, pluginVersion.ToString());
     }
 }

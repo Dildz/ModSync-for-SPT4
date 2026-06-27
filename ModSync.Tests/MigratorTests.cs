@@ -106,6 +106,25 @@ public class MigratorTests
     }
 
     [Test]
+    public void TestVersionTxtAdvancesOnPatchBump()
+    {
+        // Regression: a >=0.9.0 client on the same minor as the plugin (e.g. 0.12.0 -> 0.12.4)
+        // hit the warn-only branch and never rewrote Version.txt, so it stayed "older than the
+        // server" and re-warned every boot. Version.txt must advance to the running plugin version.
+        var testDirectory = TestUtils.GetTemporaryDirectory();
+        var modSyncDir = Directory.CreateDirectory(Path.Combine(testDirectory, "ModSync_Data")).FullName;
+        File.WriteAllText(Path.Combine(modSyncDir, "Version.txt"), "0.12.0");
+
+        List<SyncPath> syncPaths = [new(@"BepInEx\plugins"), new(@"BepInEx\patchers")];
+
+        new Migrator(testDirectory).TryMigrate(Version.Parse("0.12.4"), syncPaths);
+
+        Assert.That(File.ReadAllText(Path.Combine(modSyncDir, "Version.txt")), Is.EqualTo("0.12.4"));
+
+        Directory.Delete(testDirectory, true);
+    }
+
+    [Test]
     public void TestMigrateModSyncDirectoryFrom080()
     {
         var sourceDirectory = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), @"..\..\..\MigratorTests", "ModSyncDirectory"));
