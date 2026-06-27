@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx.Logging;
+using ModSync.Utility;
 using Mono.Cecil;
 using Newtonsoft.Json;
 
@@ -107,30 +108,37 @@ public static class Patcher
             var rel = src.Substring(PendingUpdatesDir.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var dest = Path.Combine(GameDir, rel);
 
+            // net472 enforces the 260-char MAX_PATH, and `src` (under ModSync_Data\PendingUpdates\)
+            // is the longest path in the whole apply pipeline. Hand every filesystem op the
+            // \\?\-extended form so deep installs don't throw DirectoryNotFoundException. `rel`
+            // stays raw — it's only used for logging and the IsInManagedFolder match.
+            var srcExt = LongPath.Extended(src);
+            var destExt = LongPath.Extended(dest);
+
             try
             {
                 // Staged file already matches what's installed (e.g. leftovers of a
                 // partially failed earlier run) — nothing to apply, just clear it.
-                if (File.Exists(dest) && FilesAreIdentical(src, dest))
+                if (File.Exists(destExt) && FilesAreIdentical(srcExt, destExt))
                 {
-                    File.Delete(src);
+                    File.Delete(srcExt);
                     alreadyCurrent++;
                     continue;
                 }
 
-                Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                Directory.CreateDirectory(LongPath.Extended(Path.GetDirectoryName(dest)));
 
-                if (IsInManagedFolder(rel) && File.Exists(dest))
+                if (IsInManagedFolder(rel) && File.Exists(destExt))
                 {
-                    File.Copy(dest, dest + ".modsync-bak", overwrite: true);
+                    File.Copy(destExt, LongPath.Extended(dest + ".modsync-bak"), overwrite: true);
                     Info($"Backed up {rel}");
                 }
 
-                CopyReplacingLocked(src, dest);
+                CopyReplacingLocked(srcExt, destExt);
 
                 // Per-file cleanup: clear each staged file as soon as it's applied, so a
                 // failure elsewhere can't cause this one to be re-applied every boot.
-                File.Delete(src);
+                File.Delete(srcExt);
                 Info($"Applied {rel}");
                 applied++;
             }
@@ -176,7 +184,7 @@ public static class Patcher
         {
             try
             {
-                var fullPath = Path.Combine(GameDir, rel);
+                var fullPath = LongPath.Extended(Path.Combine(GameDir, rel));
                 if (!File.Exists(fullPath))
                     continue;
 

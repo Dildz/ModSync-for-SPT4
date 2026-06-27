@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using ModSync.Utility;
 using Newtonsoft.Json;
 
 namespace ModSync.Updater;
@@ -22,15 +23,22 @@ public static class Updater
         {
             var destPath = Path.Combine(target.FullName, file.Name);
 
+            // Windows MAX_PATH: the source (under the staged update dir) is the longest path here,
+            // and .NET on Windows still defers to the OS 260-char limit unless paths are
+            // \\?\-prefixed. Apply the prefix to the actual filesystem ops so deep installs don't
+            // throw DirectoryNotFoundException. (No-op on short paths / non-Windows.)
+            var srcExt = LongPath.Extended(file.FullName);
+            var destExt = LongPath.Extended(destPath);
+
             // Back up any existing Managed file before overwriting.
-            if (File.Exists(destPath) && IsInManagedFolder(destPath))
+            if (File.Exists(destExt) && IsInManagedFolder(destPath))
             {
                 Logger.Log($"Backing up: {destPath}");
-                File.Copy(destPath, destPath + ".modsync-bak", overwrite: true);
+                File.Copy(destExt, LongPath.Extended(destPath + ".modsync-bak"), overwrite: true);
             }
 
             Logger.Log($"Copying file: {destPath}");
-            file.MoveTo(destPath, true);
+            File.Move(srcExt, destExt, overwrite: true);
         }
     }
 

@@ -93,7 +93,12 @@ public class Server(Version pluginVersion)
             return;
 
         var downloadPath = Path.Combine(downloadDir, file);
-        VFS.CreateDirectory(downloadPath.GetDirectory());
+        // net472 enforces the 260-char MAX_PATH; deep installs + deeply-nested mods blow past it
+        // and FileStream/Directory ops throw DirectoryNotFoundException. Hand the directory- and
+        // file-creation calls the extended-length (`\\?\`) form so they bypass the limit. We keep
+        // GetDirectory() operating on the plain path — only the strings that actually touch the
+        // filesystem get prefixed.
+        VFS.CreateDirectory(LongPath.Extended(downloadPath.GetDirectory()));
 
         var retryCount = 0;
 
@@ -122,7 +127,7 @@ public class Server(Version pluginVersion)
                     response.EnsureSuccessStatusCode();
 
                     using var responseStream = await response.Content.ReadAsStreamAsync();
-                    using var fileStream = new FileStream(downloadPath, FileMode.Create);
+                    using var fileStream = new FileStream(LongPath.Extended(downloadPath), FileMode.Create);
                     await responseStream.CopyToAsync(fileStream, 81920, cancellationToken);
 
                     return;

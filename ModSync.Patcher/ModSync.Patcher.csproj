@@ -11,6 +11,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Shared MAX_PATH helper — link just this one file (the patcher doesn't need the rest of Utility). -->
+    <Compile Include="..\ModSync.Utility\LongPath.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="BepInEx.Core" Version="5.*" />
     <!--
       Mono.Cecil ships in BepInEx/core/ — available at preloader stage.
