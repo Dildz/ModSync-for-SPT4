@@ -47,3 +47,19 @@ Upstream's last release (`v0.11.1`, Mar 2025) targets SPT 3.11. No upstream SPT 
 ## FIKA compatibility
 
 In scope. FIKA 4.x exists (Fika-Plugin v2.2.6, separate `Fika-Server-CSharp` repo). Headless client paths should be preserved/ported, not stripped.
+
+## Build & test
+
+- **CI (`ci.yml`) runs on `windows-latest`** — every push to `SPT4.0.x` runs `Build` + `Run client tests` (`ModSync.Tests`) + `Run server tests` (`ModSync.Server.Tests`). **CI is the authoritative correctness gate; it matches the real target (the BepInEx client is Windows-only).**
+- **Local `dotnet test` on Linux gives false failures.** A handful of tests assert Windows path semantics or use backslash fixture paths, so they fail on Linux but pass on Windows CI:
+  - `ModSync.Server.Tests/SanitizeDownloadPathTests` (Windows-absolute-path / path-resolution checks)
+  - `ModSync.Tests/MigratorTests` fixture-copy tests (`..\..\..\MigratorTests` backslash paths)
+  - Everything else (Config, GetFilesInDir, HashModFilesAsync, Sync, Integration) passes on both. When in doubt, trust the Windows CI run, not a local Linux run.
+- On this Linux host the working SDK is **.NET 9 at `/home/ubuntu/.dotnet/dotnet`** (plain `dotnet` is an 8.0-only system install that can't build net9). Build OOMs on default parallelism — use `MSBUILDDISABLENODEREUSE=1 ... -m:1 -p:BuildInParallel=false`.
+
+## Releasing
+
+`release.yml` is **tag-triggered** (`v*`); tagging only builds + publishes the zip, it does NOT re-run tests — so **CI must be green on the branch HEAD before you tag.** Steps:
+1. Push changes to `SPT4.0.x`, wait for CI green.
+2. Bump version: `ModSync.Server/ModSyncMod.cs` (`Version`) + client `ModSync/Properties/AssemblyInfo.cs`, and update the `release.yml` body (see its "UPDATE BEFORE TAGGING" note).
+3. `git tag vX.Y.Z && git push --tags` (use `-preN` suffix for a pre-release trial). Release workflow attaches the zip.
