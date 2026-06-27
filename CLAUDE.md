@@ -20,10 +20,10 @@ Upstream's last release (`v0.11.1`, Mar 2025) targets SPT 3.11. No upstream SPT 
 |---|---|---|
 | `ModSync/` | BepInEx client plugin (.NET 4.7.2) | Same target, references updated for SPT 4 DLLs at `D:\SPTarkov4.0\BepInEx\plugins\spt\` |
 | `ModSync.Server/` | **TypeScript** mod for SPT 3.x server | **Rewrite to C#** against `SPTarkov.Server.Core` (SPT 4's new C# server). Use `..\server-mod-examples\` as pattern reference. |
-| `ModSync.Updater/` | Standalone .NET 8 WinForms exe | Probably untouched. Signing currently uses `Corter-Signing.snk` which we don't have — needs replacing or disabling. |
-| `ModSync.HashTester/` | .NET 8 console | Probably untouched. |
+| `ModSync.Updater/` | Standalone .NET 8 WinForms exe | Bumped to **net9.0-windows**. Signing currently uses `Corter-Signing.snk` which we don't have — needs replacing or disabling. |
+| `ModSync.HashTester/` | .NET 8 console | Bumped to **net9.0**. |
 | `ModSync.MetroHash/` | Rust crate (native hash lib) | Probably untouched. |
-| `ModSync.Tests/` | NUnit on .NET 8 | Probably untouched, but tests for the C# server rewrite need writing. |
+| `ModSync.Tests/` | NUnit on .NET 8 | Bumped to **net9.0**. Server-side tests now exist in `ModSync.Server.Tests/` (also net9.0). |
 | `ModSync.Utility/` | Shared projitems | May survive or be folded into the server rewrite. |
 
 ## Reference dirs (sibling to this repo)

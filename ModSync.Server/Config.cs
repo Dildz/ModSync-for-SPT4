@@ -127,16 +127,63 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
     /// </summary>
     private const string DefaultConfig = """
         {
+            // ┌─────────────────────────────────────────────────────────────────────┐
+            // │  WIKI — FULL CONFIG GUIDE:                                          │
+            // │  https://github.com/Dildz/ModSync-for-SPT4.0/wiki/Configuration     │
+            // │  Every option below is documented there with examples.              │
+            // └─────────────────────────────────────────────────────────────────────┘
+
             // SPT 4 directory layout: server runs from <gameRoot>/SPT/.
             //   "<gameRoot>/BepInEx/..."  →  client-side mods (../BepInEx/...)
             //
             // The `user/mods` folder is NOT a syncPath. Server mods stay server-only
             // by design — their client-facing components ship as separate BepInEx
             // plugins, which DO sync via the paths below.
+            //
+            // Each path/entry can be configured as EITHER:
+            //   1. A plain string  — sync this path with all defaults (what we use below).
+            //   2. An object       — same path, but override HOW it syncs. A plain string
+            //                        is just shorthand for an object with every option at
+            //                        its default.
+            //
+            // The five options:
+            //
+            //     "path"            (required)        Folder or file to sync. Globs NOT allowed.
+            //     "name"            (default: path)   Friendly label shown in the client's F12 sync menu.
+            //     "enabled"         (default: true)   true = opt-out (synced unless client unchecks it),
+            //                                         false = opt-in (client must check the box first).
+            //     "enforced"        (default: false)  true = server wins, always. Client can't opt out,
+            //                                         can't keep local edits, can't exclude it. Use for
+            //                                         files every client MUST match (e.g. patchers).
+            //     "restartRequired" (default: true)   Must the client restart after these files update?
+            //     "silent"          (default: false)  false = show the client a prompt of changes.
+            //                                         true  = apply quietly in the background on load.
+            //
+            // Paths are matched MOST-SPECIFIC FIRST, so you can set defaults on a folder
+            // and override just one child inside it (e.g. enforce a single config file).
             "syncPaths": [
                 "../BepInEx/plugins",
                 "../BepInEx/patchers",
                 "../BepInEx/config"
+
+                // ── Object-form example (uncomment & adapt) ──
+                // Force every client to match the server's patchers exactly — a version
+                // mismatch on a patcher DLL can otherwise leave a client silently stuck:
+                //
+                // {
+                //     "path": "../BepInEx/patchers",
+                //     "name": "Preloader patchers",
+                //     "enforced": true
+                // }
+                //
+                // Opt-in extra (off unless the client ticks it), applied without a restart:
+                //
+                // {
+                //     "path": "../BepInEx/plugins/SomeOptionalMod",
+                //     "name": "Optional: Some Mod",
+                //     "enabled": false,
+                //     "restartRequired": false
+                // }
             ],
 
             //-----------------------------------------------------------------------
@@ -144,7 +191,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             // Paths ignored by ModSync (players AND headless alike).
             // Use for SPT internals, per-instance state files mods don't want
             // overwritten, and the universal `.nosync` opt-out pattern.
-            // See CONFIG.md for guidance on what belongs here.
+            // See the wiki [exclusions] for guidance on what belongs here.
             "exclusions": [
                 // SPT Installer files — not "mods", they come with the SPT install
                 "../BepInEx/plugins/spt",
@@ -181,8 +228,16 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             //   - a folder:     "../BepInEx/plugins/SAIN"                      (matches the folder + contents)
             //   - an exact DLL: "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll"    (matches just that file)
             //
-            // See CONFIG.md for a full working example.
+            // See the wiki [headlessIncludes] for extra details.
             "headlessIncludes": [
+                // Fika (Core + Headless.dll both live in this folder) and ModSync
+                "../BepInEx/plugins/Fika",
+                "../BepInEx/plugins/Corter-ModSync"   // ← add a comma here before uncommenting below
+
+                // Bot AI + behavior (example entries — add your own below)
+                // "../BepInEx/plugins/SAIN",
+                // "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll",
+                // "../BepInEx/plugins/DrakiaXYZ-Waypoints"
             ],
 
             //-----------------------------------------------------------------------
@@ -203,7 +258,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             //              backed up as <filename>.modsync-bak before being replaced.
             // On removal:  if a .modsync-bak exists, the original is restored automatically.
             //              If no backup was made (file was new), the file is deleted.
-            // See CONFIG.md for guidance on what belongs here.
+            // See the wiki [managedIncludes] for extra details.
             "managedIncludes": [
                 // DynamicMaps example — remove or replace with your own mod's files:
                 // "Unity.VectorGraphics.dll",
@@ -217,6 +272,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             // Headless runs the game simulation without the rendering stack, so Managed
             // files are almost never needed there. Leave this empty unless a mod's install
             // instructions specifically say it is required on headless.
+            // Will probably always be empty, but the option is here for future use if needed.
             "headlessManagedIncludes": [
             ]
         }
