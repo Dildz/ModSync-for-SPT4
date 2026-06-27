@@ -116,15 +116,16 @@ jobs:
           body: |
             ## Changes
 
-            - **Patcher: per-file update apply** — each staged file is applied and cleared independently; one failed file no longer keeps the entire `PendingUpdates` folder stuck on every boot
-            - **Patcher: can now update itself** — loaded (locked) DLLs are renamed aside as `*.modsync-old` and replaced; leftovers are cleaned up automatically on the next boot
-            - **Patcher: already-current files are skipped** — staged files byte-identical to what's installed are discarded instead of re-applied every boot
-            - **Patcher: fault-tolerant file removal** — one failed deletion no longer aborts the remaining removals
-            - **New: persistent update log on headless** — the patcher logs to `ModSync_Data/ModSync.log` (same file the Windows Updater writes), surviving BepInEx's per-boot `LogOutput.log` overwrite
-            - **Fix: startup warning pointed to a log file that doesn't exist** — now points to `ModSync_Data/ModSync.log` on all platforms
+            - **New: trim ModSync's own dead-weight components per client** — a headless admin can drop the desktop `ModSync.Updater.exe` (headless never runs it), and a player can drop the headless `Corter-ModSync-Prepatch.dll` patcher, by adding the path to that install's `ModSync_Data/Exclusions.jsonc`. Each component stays enforced on the side that *does* need it, so you can't accidentally break your own updates. Off by default — both still ship everywhere unless you opt out. See the [wiki](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/Configuration#trimming-modsyncs-own-components-optional).
+            - **The default `config.jsonc` now documents the `syncPaths` object form** — each entry can be a plain string or an object with `enabled` / `enforced` / `silent` / `restartRequired` / `name` to control how that path syncs. These options already worked; they're now shown inline with examples (and the file links the full config guide). Existing configs are unaffected.
+            - **Fix: Windows long-path (MAX_PATH) crashes** — a deep install combined with a deeply-nested mod could exceed Windows' 260-character path limit and fail with `DirectoryNotFoundException` during download or apply. Paths now use the extended-length prefix on Windows; no effect on shorter paths or Linux/headless.
+            - **Fix: `Version.txt` now advances on patch upgrades** — clients on the same minor version (e.g. 0.12.0 → 0.12.x) no longer get stuck reporting an out-of-date version on every boot. Existing stuck installs self-heal on the first boot after updating.
+            - **Polish: coloured server console logs** — the startup banner is green and the routine per-request hash line is greyed, so ModSync is easier to spot in a busy server console.
 
             ## Upgrade notes
 
-            Unzip into your game root as usual.
+            > ⚠️ **Back up your server config before extracting.** The zip ships a default `SPT/user/mods/Corter-ModSync/config.jsonc`, so unzipping over an existing **server** install overwrites your customised config (syncPaths, exclusions, headlessIncludes, etc.). Copy it aside first and merge your settings back, or extract everything *except* `config.jsonc`. Client installs have no server config to lose.
 
-            **Upgrading an existing install:** the patcher moved from `BepInEx/patchers/Corter-ModSync/Corter-ModSync.Patcher.dll` to `BepInEx/patchers/Corter-ModSync-Prepatch.dll` (no subfolder). On the **server** — and any manually managed headless — delete the old `BepInEx/patchers/Corter-ModSync/` folder after upgrading, or clients will keep syncing the obsolete patcher back down. Synced clients clean it up automatically when *Delete removed files* is enabled.
+            Otherwise unzip into your game root as usual — clients update via sync, no manual steps.
+
+            **Coming from before v0.12.4?** See the v0.12.4 notes for the one-time `BepInEx/patchers/Corter-ModSync/` folder cleanup on the server/headless.

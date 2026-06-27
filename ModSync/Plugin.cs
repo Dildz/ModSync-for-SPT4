@@ -22,7 +22,7 @@ namespace ModSync;
 using SyncPathFileList = Dictionary<string, List<string>>;
 using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 
-[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.4")]
+[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.5")]
 public class Plugin : BaseUnityPlugin
 {
     private static readonly string MODSYNC_DIR = Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data");
@@ -60,9 +60,16 @@ public class Plugin : BaseUnityPlugin
 // Edits to this file are read at game startup, not live — restart EFT
 // to apply.
 //
+// Optional — trim the ModSync component this client never runs:
+//   On a PLAYER, drop the headless-only patcher:
+//     ""BepInEx/patchers/Corter-ModSync-Prepatch.dll""
+//   On a HEADLESS, drop the desktop-only Updater:
+//     ""ModSync.Updater.exe""
+//   ModSync ignores the wrong one — you can't remove the component you need.
+//
 // Examples (delete the empty array below and replace with your own):
-//   ""BepInEx/plugins/AmandsGraphics.dll"",
-//   ""BepInEx/plugins/DynamicMaps/**""
+//   ""BepInEx/plugins/NoInsurance.dll"",
+//   ""BepInEx/plugins/HollywoodGraphics/**""
 []
 ";
 
