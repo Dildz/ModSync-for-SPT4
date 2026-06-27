@@ -1,6 +1,5 @@
 ﻿namespace ModSync.Utility;
 
-using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
@@ -21,11 +20,6 @@ public static partial class Glob
             ["**/"] = "(.+/)?" // one or more directories
         };
 
-    private static string MapToPattern(string str)
-    {
-        return GlobPatterns[str];
-    }
-
     private static string Replace(string glob)
     {
         // Globs from the server arrive in wire format using backslashes (e.g.
@@ -36,23 +30,10 @@ public static partial class Glob
         // We escape every literal backslash up front so the regex engine treats
         // each "\" as a literal character (regex source "\\" → matches one "\").
         glob = glob.Replace(@"\", @"\\");
-        return GlobRE.Replace(RestRE.Replace(DotRE.Replace(glob, DotPattern), RestPattern), match => MapToPattern(match.Value));
+        return GlobRE.Replace(RestRE.Replace(DotRE.Replace(glob, DotPattern), RestPattern), match => GlobPatterns[match.Value]);
     }
 
-    private static string Join(string[] globs)
-    {
-        return $"(({string.Join(")|(", Array.ConvertAll(globs, Replace))}))";
-    }
+    public static Regex Create(string glob) => new($"^{Replace(glob)}$", RegexOptions.Compiled);
 
-    public static Regex Create(object glob)
-    {
-        var pattern = glob is string[] globArray ? Join(globArray) : Replace((string)glob);
-        return new Regex($"^{pattern}$", RegexOptions.Compiled);
-    }
-
-    public static Regex CreateNoEnd(object glob)
-    {
-        var pattern = glob is string[] globArray ? Join(globArray) : Replace((string)glob);
-        return new Regex($"^{pattern}", RegexOptions.Compiled);
-    }
+    public static Regex CreateNoEnd(string glob) => new($"^{Replace(glob)}", RegexOptions.Compiled);
 }
