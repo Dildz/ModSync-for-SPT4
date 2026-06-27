@@ -432,13 +432,36 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 : defaultRestartRequired);
     }
 
+    // Server-cwd-relative paths of the two audience-specific builtins. The Updater is a
+    // desktop-player tool; the patcher applies updates on headless. ModSyncHttpListener flips
+    // their `enforced` flag per audience at serve time via ResolveEnforced.
+    public const string UpdaterSyncPath = "../ModSync.Updater.exe";
+    public const string PatcherSyncPath = "../BepInEx/patchers/Corter-ModSync-Prepatch.dll";
+
+    /// <summary>
+    /// Per-audience enforcement for the two audience-specific builtins. The Updater (desktop
+    /// players only) is enforced for players and relaxed for headless; the patcher (headless
+    /// only) is enforced for headless and relaxed for players. "Enforced" means the client
+    /// can't drop it via Exclusions.jsonc — so each audience can trim the component it never
+    /// runs, yet can't accidentally remove the one it depends on. All other paths keep their
+    /// configured value.
+    /// </summary>
+    public static bool ResolveEnforced(SyncPath syncPath, bool isHeadless)
+    {
+        if (syncPath.path == UpdaterSyncPath) return !isHeadless;
+        if (syncPath.path == PatcherSyncPath) return isHeadless;
+        return syncPath.enforced;
+    }
+
     /// <summary>
     /// Public entry point. Reads disk, validates, builds the final Config including:
-    ///   1) two prepended built-in syncpaths (ModSync's own DLL + Updater — always synced
-    ///      so users can't accidentally desync the mod itself)
+    ///   1) three prepended built-in syncpaths (ModSync's plugin, Updater, and patcher — always
+    ///      synced so users can't accidentally desync the mod itself; Updater/patcher enforcement
+    ///      is then made audience-specific at serve time, see ResolveEnforced)
     ///   2) user-defined syncpaths from the file
-    ///   3) sorted by path length descending — when a file matches multiple syncpaths,
-    ///      the more-specific (longer) path wins.
+    ///   3) sorted by path length descending — when a file matches multiple syncpaths, the
+    ///      more-specific (longer) path wins (so the patcher FILE builtin overrides the enclosing
+    ///      ../BepInEx/patchers folder).
     /// </summary>
     public async Task<Config> LoadAsync()
     {
@@ -448,12 +471,22 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         // Built-ins use ../ prefix for SPT 4 layout (server runs from <gameRoot>/SPT/).
         // `enforced=true` means the client always re-syncs these even if the user deleted them,
         // and `silent=true` hides them from the UI's "files about to update" prompt.
+        //
+        // The Updater and patcher carry their DEFAULT (player-facing) enforcement here;
+        // ModSyncHttpListener flips it per audience at serve time via ResolveEnforced. The patcher
+        // is a dedicated FILE builtin rather than relying on the ../BepInEx/patchers folder so
+        // enforcement stays scoped to ModSync's own patcher — enforcing the whole folder would
+        // delete excluded-but-required files like spt-prepatch.dll.
         var builtins = new List<SyncPath>
         {
             new(
-                path: "../ModSync.Updater.exe",
+                path: UpdaterSyncPath,
                 name: "(Builtin) ModSync Updater",
                 enabled: true, enforced: true, silent: true, restartRequired: false),
+            new(
+                path: PatcherSyncPath,
+                name: "(Builtin) ModSync Patcher",
+                enabled: true, enforced: false, silent: true, restartRequired: true),
             new(
                 path: "../BepInEx/plugins/Corter-ModSync",
                 name: "(Builtin) ModSync Plugin",

@@ -148,6 +148,12 @@ public class ModSyncHttpListener(
     /// </summary>
     private async Task HandlePathsAsync(HttpContext context)
     {
+        // The Updater (desktop players) and patcher (headless) are each enforced for the audience
+        // that runs them and relaxed for the other, so the unused component can be trimmed via
+        // Exclusions.jsonc while the needed one can't be accidentally removed (see ResolveEnforced).
+        // The client appends ?headless=1 here exactly as it does on /hashes.
+        var isHeadless = context.Request.Query.ContainsKey("headless");
+
         // Project to anonymous objects so we can rewrite paths to the wire format
         // without mutating the shared SyncPath instances (they're held by Config).
         // Pipeline per path: WinPath (normalize separators) → ToWirePath (translate
@@ -157,7 +163,7 @@ public class ModSyncHttpListener(
             path = PathExt.ToWirePath(PathExt.WinPath(sp.path)),
             name = sp.name,
             enabled = sp.enabled,
-            enforced = sp.enforced,
+            enforced = ConfigUtil.ResolveEnforced(sp, isHeadless),
             silent = sp.silent,
             restartRequired = sp.restartRequired,
         });

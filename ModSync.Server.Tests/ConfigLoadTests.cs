@@ -78,6 +78,55 @@ public class ConfigLoadTests
         });
     }
 
+    [Test]
+    public async Task AlwaysIncludesModSyncPatcherInSyncPaths()
+    {
+        File.WriteAllText(ConfigPath, @"{ ""syncPaths"": [], ""exclusions"": [] }");
+
+        var config = await MakeUtil().LoadAsync();
+
+        Assert.That(config.SyncPaths, Has.Some.Matches<SyncPath>(sp =>
+            sp.path.Contains("Corter-ModSync-Prepatch")));
+    }
+
+    // ── Per-audience enforcement (ResolveEnforced) ────────────────────────────
+
+    [Test]
+    public void Updater_EnforcedForPlayers_RelaxedForHeadless()
+    {
+        var updater = new SyncPath(ConfigUtil.UpdaterSyncPath, enforced: true);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ConfigUtil.ResolveEnforced(updater, isHeadless: false), Is.True);   // players keep it
+            Assert.That(ConfigUtil.ResolveEnforced(updater, isHeadless: true), Is.False);   // headless can trim it
+        });
+    }
+
+    [Test]
+    public void Patcher_EnforcedForHeadless_RelaxedForPlayers()
+    {
+        var patcher = new SyncPath(ConfigUtil.PatcherSyncPath, enforced: false);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ConfigUtil.ResolveEnforced(patcher, isHeadless: true), Is.True);    // headless keeps it
+            Assert.That(ConfigUtil.ResolveEnforced(patcher, isHeadless: false), Is.False);  // players can trim it
+        });
+    }
+
+    [Test]
+    public void OtherPaths_KeepTheirConfiguredEnforcement()
+    {
+        var plugin = new SyncPath("../BepInEx/plugins/Corter-ModSync", enforced: true);
+        var userPath = new SyncPath("../BepInEx/plugins", enforced: false);
+        Assert.Multiple(() =>
+        {
+            Assert.That(ConfigUtil.ResolveEnforced(plugin, isHeadless: true), Is.True);
+            Assert.That(ConfigUtil.ResolveEnforced(plugin, isHeadless: false), Is.True);
+            Assert.That(ConfigUtil.ResolveEnforced(userPath, isHeadless: true), Is.False);
+            Assert.That(ConfigUtil.ResolveEnforced(userPath, isHeadless: false), Is.False);
+        });
+    }
+
     // ── User syncpath loading ─────────────────────────────────────────────────
 
     [Test]

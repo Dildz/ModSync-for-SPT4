@@ -169,7 +169,11 @@ public class Server(Version pluginVersion)
 
     public async Task<List<SyncPath>> GetModSyncPaths()
     {
-        return Json.Deserialize<List<SyncPath>>(await GetJson("/modsync/paths"));
+        // Append ?headless=1 on headless so the server returns per-audience `enforced` flags
+        // (Updater relaxed + patcher enforced for headless; the reverse for players). Without
+        // it the server can't tell which side it's serving and would fall back to player defaults.
+        var query = Plugin.IsHeadless ? "?headless=1" : "";
+        return Json.Deserialize<List<SyncPath>>(await GetJson($"/modsync/paths{query}"));
     }
 
     public async Task<List<string>> GetModSyncExclusions()
