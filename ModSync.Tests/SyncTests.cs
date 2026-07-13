@@ -364,6 +364,41 @@ public class RemovedFilesTests
     }
 
     [Test]
+    public void TestDeselectedOptionalMod_RemovesOnlyModSyncInstalled()
+    {
+        // A deselected opt-in path is compared with an EMPTY remote (the server was never asked
+        // for it). Its ModSync-installed files (present in previousSync) are removed; a file the
+        // player hand-installed (never in previousSync) is left alone.
+        var path = @"BepInEx\plugins\OptionalMod";
+
+        var localModFiles = new Dictionary<string, Dictionary<string, ModFile>>
+        {
+            {
+                path,
+                new Dictionary<string, ModFile>
+                {
+                    { @"BepInEx\plugins\OptionalMod\synced.dll", new ModFile("1") },
+                    { @"BepInEx\plugins\OptionalMod\manual.dll", new ModFile("2") },
+                }
+            },
+        };
+
+        // Deselected → empty remote.
+        var remoteModFiles = new Dictionary<string, Dictionary<string, ModFile>> { { path, new Dictionary<string, ModFile>() } };
+
+        // ModSync only ever installed synced.dll.
+        var previousRemoteModFiles = new Dictionary<string, Dictionary<string, ModFile>>
+        {
+            { path, new Dictionary<string, ModFile> { { @"BepInEx\plugins\OptionalMod\synced.dll", new ModFile("1") } } },
+        };
+
+        var removedFiles = Sync.GetRemovedFiles([new SyncPath(path)], localModFiles, remoteModFiles, previousRemoteModFiles);
+
+        Assert.That(removedFiles[path], Is.EquivalentTo(new List<string> { @"BepInEx\plugins\OptionalMod\synced.dll" }),
+            "deselected mod: remove the ModSync-installed file, leave the hand-installed one");
+    }
+
+    [Test]
     public void TestSingleRemovedEnforced()
     {
         var localModFiles = new Dictionary<string, Dictionary<string, ModFile>>
@@ -547,6 +582,54 @@ public class HashLocalFilesTests
             Assert.That(result, Is.Not.Null);
             Assert.That(result[syncPath], Is.Empty);
         });
+    }
+
+    [Test]
+    public void TestHashLocalFiles_DisabledOverride_CarvesOutOfCatchAll()
+    {
+        // Catch-all "plugins" (active) + "plugins/OtherMod" as a disabled (opt-out) override.
+        // OtherMod's files must be claimed by the override — so they're NOT in the catch-all's
+        // local set — and the override itself isn't returned. This stops an opt-out mod sitting
+        // inside a catch-all from being flagged for add/remove.
+        //
+        // Self-contained real dir tree (Path.Combine, not backslash literals) so it runs on
+        // both Linux and Windows.
+        var dir = TestUtils.GetTemporaryDirectory();
+        try
+        {
+            var plugins = Path.Combine(dir, "plugins");
+            var otherMod = Path.Combine(plugins, "OtherMod");
+            Directory.CreateDirectory(otherMod);
+            File.WriteAllText(Path.Combine(plugins, "file1.dll"), "a");
+            File.WriteAllText(Path.Combine(otherMod, "other_mod.dll"), "b");
+
+            var catchAll = new SyncPath("plugins");
+            var otherModOverride = new SyncPath(Path.Combine("plugins", "OtherMod"), enabled: false);
+
+            // Longest-first, as Config sorts them.
+            var result = Sync.HashLocalFiles(
+                dir,
+                [otherModOverride, catchAll],
+                [],
+                isActive: sp => sp.path == "plugins" // only the catch-all is active
+            ).Result;
+
+            var pluginsFiles = result["plugins"].Keys.Select(k => k.Replace('\\', '/')).ToList();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(result, Does.Not.ContainKey(otherModOverride.path),
+                    "inactive override must not be returned");
+                Assert.That(pluginsFiles, Has.None.Contains("OtherMod/other_mod.dll"),
+                    "override's file must not leak into the catch-all's local set");
+                Assert.That(pluginsFiles, Has.Some.Contains("plugins/file1.dll"),
+                    "the rest of the catch-all must still be hashed");
+            });
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
     }
 
     // TestHashLocalFilesEnforcedIgnoresLocalExclusions removed: local walk no longer

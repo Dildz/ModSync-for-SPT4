@@ -167,10 +167,35 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     /// universal exclusions. Enforced syncpaths bypass the allowlist so ModSync itself can
     /// always self-update on headless.
     /// </summary>
+    // Hardcoded edge case: DynamicMaps is (so far) the only SPT4 mod that ships
+    // EscapeFromTarkov_Data/Managed files — modified base-game Unity DLLs that REPLACE the
+    // originals (DM won't run on the originals; the originals won't run DM's modified base
+    // behaviour cleanly either). They must only reach a client that actually runs DM,
+    // otherwise an opt-out client ends up with DM's modified engine DLLs and no DM plugin.
+    // managedIncludes has no opt-in concept, so we gate these two files on the DM plugin
+    // syncpath's active state. When DM is opted out, we withhold them — the client then
+    // restores its .modsync-bak originals (back to vanilla).
+    private const string DynamicMapsPluginPath = "../BepInEx/plugins/DynamicMaps";
+    private static readonly string[] DynamicMapsManagedFiles =
+        ["Unity.VectorGraphics.dll", "Unity.InternalAPIEngineBridge.003.dll"];
+
     public async Task<Dictionary<string, Dictionary<string, ModFile>>> HashModFilesAsync(
         IEnumerable<SyncPath> syncPaths,
-        bool isHeadless = false)
+        bool isHeadless = false,
+        Func<SyncPath, bool>? isActive = null)
     {
+        // Ownership (which syncpath claims a file) is computed over EVERY path passed in,
+        // even inactive ones — so a disabled/opt-out override still carves its files out of
+        // an enclosing catch-all. Only ACTIVE paths (enabled/enforced/requested) are hashed
+        // and returned. Default: everything active.
+        isActive ??= _ => true;
+
+        // DM is "opted out" for this request when its plugin syncpath is present but inactive.
+        // When so, its Managed DLLs are withheld from the served list below.
+        var dynamicMapsOptedOut = syncPaths.Any(sp =>
+            PathExt.WinPath(sp.path).Equals(PathExt.WinPath(DynamicMapsPluginPath), StringComparison.OrdinalIgnoreCase)
+            && !isActive(sp));
+
         var result = new Dictionary<string, Dictionary<string, ModFile>>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var startedAt = DateTime.UtcNow;
@@ -178,6 +203,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 
         foreach (var syncPath in syncPaths)
         {
+            var active = isActive(syncPath);
             var perPath = new Dictionary<string, ModFile>();
 
             // Decide once per syncpath which allowlist gates apply.
@@ -191,7 +217,13 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
             foreach (var file in GetFilesInDir(syncPath.path, skipExclusions: applyHeadlessPluginsAllowlist))
             {
                 var winFile = PathExt.WinPath(file);
-                if (!seen.Add(winFile)) continue;
+                if (!seen.Add(winFile)) continue; // claim ownership across ALL paths, active or not
+
+                // Inactive path (opt-out override, or one the client didn't request): its files
+                // are now claimed — so an enclosing catch-all can't re-serve them — but we never
+                // hash or return them ourselves. This is what makes an optional path toggled off
+                // actually opt out, even when it sits inside a catch-all.
+                if (!active) continue;
 
                 // Headless+plugins: headlessIncludes is the sole filter — exclusions are
                 // intentionally bypassed above so that files like Fika.Headless.dll can be
@@ -209,6 +241,12 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
                     var allowed = isHeadless
                         ? config.IsHeadlessManagedAllowed(fileName)
                         : config.IsManagedAllowed(fileName);
+
+                    // Withhold DM's Managed DLLs when DM is opted out (see DynamicMapsManagedFiles).
+                    if (allowed && dynamicMapsOptedOut
+                        && DynamicMapsManagedFiles.Any(f => f.Equals(fileName, StringComparison.OrdinalIgnoreCase)))
+                        allowed = false;
+
                     if (!allowed) continue;
                 }
 
@@ -216,7 +254,8 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
                 filesHashed++;
             }
 
-            result[PathExt.WinPath(syncPath.path)] = perPath;
+            if (active)
+                result[PathExt.WinPath(syncPath.path)] = perPath;
         }
 
         var elapsedMs = (DateTime.UtcNow - startedAt).TotalMilliseconds;

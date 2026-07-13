@@ -171,6 +171,42 @@ public class HashModFilesAsyncTests
         });
     }
 
+    // ── Disabled override under a catch-all (the optional-inside-catch-all bug) ─
+
+    [Test]
+    public async Task DisabledOverride_UnderCatchAll_FilesNotServed()
+    {
+        // A mod folder that sits INSIDE the catch-all, declared as a disabled
+        // (opt-in, unticked) override. Its files must NOT be served — not via the
+        // catch-all, and not under its own key. Regression for the bug where an
+        // optional path toggled off still syncs because the catch-all re-claims it.
+        File.WriteAllText(Path.Combine(_pluginsDir, "OtherMod.dll"), "x");
+        var dmDir = Path.Combine(_pluginsDir, "DynamicMaps");
+        Directory.CreateDirectory(dmDir);
+        File.WriteAllText(Path.Combine(dmDir, "dm.dll"), "x");
+
+        var syncUtil = MakeSyncUtil(MakeConfig());
+
+        // Longest-first, as Config sorts them. Override is inactive; catch-all active.
+        var catchAll = new SyncPath(_pluginsDir);
+        var dmOverride = new SyncPath(dmDir, enabled: false);
+
+        var result = await syncUtil.HashModFilesAsync(
+            [dmOverride, catchAll],
+            isHeadless: false,
+            isActive: sp => sp.path == _pluginsDir); // only the catch-all is active
+
+        var served = result.Values.SelectMany(files => files.Keys).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(served, Has.None.EndsWith("dm.dll"),
+                "disabled override's file must not be served (it leaked via the catch-all)");
+            Assert.That(served, Has.Some.EndsWith("OtherMod.dll"),
+                "the rest of the catch-all must still sync");
+        });
+    }
+
     // ── Enforced syncpath bypasses headless allowlist ─────────────────────────
 
     [Test]

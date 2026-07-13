@@ -198,8 +198,14 @@ public class ModSyncHttpListener(
     {
         var query = context.Request.Query;
         var isHeadless = query.ContainsKey("headless");
-        IEnumerable<SyncPath> pathsToHash = _config!.SyncPaths;
 
+        // Always hash across ALL configured syncpaths so ownership (most-specific wins) is
+        // computed over the full set — a disabled/opt-out override must carve its files out
+        // of an enclosing catch-all even though the client didn't request it. `isActive`
+        // then limits what's actually RETURNED to the paths the client asked for (plus
+        // enforced, which always applies). Without this, a toggled-off optional path would
+        // drop out of the walk and the catch-all would re-serve its files.
+        Func<SyncPath, bool> isActive = _ => true;
         if (query.ContainsKey("path"))
         {
             // The client sends paths in WIRE form (game-root-relative, forward-slash
@@ -209,15 +215,14 @@ public class ModSyncHttpListener(
                 query["path"].Where(s => s is not null).Select(s => PathExt.UnixPath(s!)),
                 StringComparer.Ordinal);
 
-            pathsToHash = _config.SyncPaths
-                .Where(sp => sp.enforced
-                    || requested.Contains(PathExt.UnixPath(PathExt.ToWirePath(PathExt.WinPath(sp.path)))));
+            isActive = sp => sp.enforced
+                || requested.Contains(PathExt.UnixPath(PathExt.ToWirePath(PathExt.WinPath(sp.path))));
         }
 
         // SyncUtil returns paths in server-cwd terms (e.g. `..\BepInEx\plugins\...`).
         // Translate every outer and inner key to wire form before sending — the client
         // resolves these relative to its own cwd (game root) and would fail otherwise.
-        var serverHashes = await _syncUtil!.HashModFilesAsync(pathsToHash, isHeadless);
+        var serverHashes = await _syncUtil!.HashModFilesAsync(_config!.SyncPaths, isHeadless, isActive);
         var wireHashes = serverHashes.ToDictionary(
             outer => PathExt.ToWirePath(outer.Key),
             outer => outer.Value.ToDictionary(

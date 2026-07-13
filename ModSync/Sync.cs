@@ -101,7 +101,7 @@ public static class Sync
                     remoteModFiles[syncPath.path]
                         .Where((kvp) => kvp.Value.directory)
                         .Select((kvp) => kvp.Key)
-                        .Except(localModFiles[syncPath.path].Keys, StringComparer.OrdinalIgnoreCase)
+                        .Except(localModFiles.TryGetValue(syncPath.path, out var localDirs) ? localDirs.Keys : new List<string>(), StringComparer.OrdinalIgnoreCase)
                         .Where((dir) => !Directory.Exists(Path.Combine(basePath, dir)))
                         .ToList()
                 );
@@ -150,9 +150,16 @@ public static class Sync
     public static async Task<SyncPathModFiles> HashLocalFiles(
         string basePath,
         List<SyncPath> syncPaths,
-        List<Regex> remoteExclusions
+        List<Regex> remoteExclusions,
+        Func<SyncPath, bool> isActive = null
     )
     {
+        // Ownership (which syncpath a local file belongs to) is claimed across EVERY path
+        // passed in, even inactive/opt-out ones — so a disabled override carves its files
+        // out of an enclosing catch-all's local set, and they're never flagged for add/remove.
+        // Only ACTIVE paths get hashed and returned. Default: everything active.
+        isActive ??= _ => true;
+
         Plugin.Logger.LogInfo($"Corter-ModSync: HashLocalFiles entered. basePath='{basePath}', syncPaths={syncPaths.Count}");
         var watch = System.Diagnostics.Stopwatch.StartNew();
         // Thread-safe dedup set. The hashing pipeline below is `.AsParallel().Select(async ...)`,
@@ -182,6 +189,15 @@ public static class Sync
             // diff and the file would stay forever.
             var candidates = GetFilesInDirectory(basePath, path, remoteExclusions)
                 .Where(file => !processedFiles.ContainsKey(file));
+
+            // Inactive path: claim its files (so an enclosing catch-all can't pick them up)
+            // but don't hash or return them — opt-out files are neither installed nor removed.
+            if (!isActive(syncPath))
+            {
+                foreach (var file in candidates)
+                    processedFiles.TryAdd(file, 0);
+                continue;
+            }
 
             results[syncPath.path] = (
                 await Task.WhenAll(

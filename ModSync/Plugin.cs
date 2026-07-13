@@ -99,7 +99,7 @@ public class Plugin : BaseUnityPlugin
     public static new readonly ManualLogSource Logger = BepInEx.Logging.Logger.CreateLogSource("ModSync");
 
     private int UpdateCount =>
-        EnabledSyncPaths
+        ProcessedSyncPaths
             .Select(syncPath =>
                 addedFiles[syncPath.path].Count
                 + updatedFiles[syncPath.path].Count
@@ -113,11 +113,55 @@ public class Plugin : BaseUnityPlugin
     /// `public` (was `private`) so Server.cs can read it; otherwise unchanged.
     /// </summary>
     public static bool IsHeadless => Chainloader.PluginInfos.ContainsKey("com.fika.headless");
-    private List<SyncPath> EnabledSyncPaths => syncPaths.Where(syncPath => configSyncPathToggles[syncPath.path].Value || syncPath.enforced).ToList();
+
+    /// <summary>
+    /// True if this syncpath's files already exist on the client. Used to seed an opt-in
+    /// toggle's DEFAULT to the installed state, so a mod the player already has isn't
+    /// defaulted off and immediately flagged for removal. Only affects the first bind.
+    /// </summary>
+    private static bool IsInstalledLocally(string relPath)
+    {
+        var full = Path.Combine(Directory.GetCurrentDirectory(), relPath);
+        if (File.Exists(full))
+            return true;
+        return Directory.Exists(full) && Directory.EnumerateFileSystemEntries(full).Any();
+    }
+    // Players pick opt-in mods via the F12 toggles. A headless has no F12 and is driven purely
+    // by the server-side recipe (headlessIncludes / headlessManagedIncludes / enforced /
+    // exclusions), so it ignores the toggles entirely and syncs every configured path — the
+    // server does the filtering. This keeps headlessIncludes authoritative instead of being
+    // silently overridden by a toggle the headless can't reach.
+    private List<SyncPath> EnabledSyncPaths =>
+        IsHeadless
+            ? syncPaths.ToList()
+            : syncPaths.Where(syncPath => configSyncPathToggles[syncPath.path].Value || syncPath.enforced).ToList();
+
+    /// <summary>
+    /// Opt-in paths the player has UN-checked that ModSync previously installed (they have a
+    /// PreviousSync entry). These get compared with an empty remote so their ModSync-installed
+    /// files are UNINSTALLED — the toggle acts as a real install/remove switch. A path never
+    /// synced by ModSync isn't here (not in PreviousSync), so hand-installed mods are left alone.
+    /// Headless has no toggles, so nothing is "deselected" there.
+    /// </summary>
+    private List<SyncPath> DeselectedSyncPaths =>
+        IsHeadless
+            ? []
+            : syncPaths.Where(syncPath =>
+                !syncPath.enforced
+                && !configSyncPathToggles[syncPath.path].Value
+                && previousSync.ContainsKey(syncPath.path)).ToList();
+
+    /// <summary>
+    /// The full set the diff/compare + apply operate on: everything to keep in sync
+    /// (<see cref="EnabledSyncPaths"/>) PLUS anything just deselected that we need to uninstall
+    /// (<see cref="DeselectedSyncPaths"/>). The server is only asked for the enabled set, so
+    /// deselected paths get an empty remote → the removal logic uninstalls what we installed.
+    /// </summary>
+    private List<SyncPath> ProcessedSyncPaths => EnabledSyncPaths.Concat(DeselectedSyncPaths).ToList();
 
     private bool SilentMode =>
         IsHeadless
-        || EnabledSyncPaths.All(syncPath =>
+        || ProcessedSyncPaths.All(syncPath =>
             syncPath.silent
             || (
                 addedFiles[syncPath.path].Count == 0
@@ -128,7 +172,7 @@ public class Plugin : BaseUnityPlugin
         );
 
     private bool NoRestartMode =>
-        EnabledSyncPaths.All(syncPath =>
+        ProcessedSyncPaths.All(syncPath =>
             !syncPath.restartRequired
             || (
                 addedFiles[syncPath.path].Count == 0
@@ -142,7 +186,7 @@ public class Plugin : BaseUnityPlugin
     {
         Sync.CompareModFiles(
             Directory.GetCurrentDirectory(),
-            EnabledSyncPaths,
+            ProcessedSyncPaths,
             localModFiles,
             remoteModFiles,
             previousSync,
@@ -312,7 +356,7 @@ public class Plugin : BaseUnityPlugin
     private void WriteModSyncData()
     {
         VFS.WriteTextFile(PREVIOUS_SYNC_PATH, Json.Serialize(remoteModFiles));
-        if (EnabledSyncPaths.Any(syncPath => (configDeleteRemovedFiles.Value || syncPath.enforced) && removedFiles[syncPath.path].Count != 0))
+        if (ProcessedSyncPaths.Any(syncPath => (configDeleteRemovedFiles.Value || syncPath.enforced) && removedFiles[syncPath.path].Count != 0))
             VFS.WriteTextFile(REMOVED_FILES_PATH, Json.Serialize(removedFiles.SelectMany(kvp => kvp.Value).ToList()));
     }
 
@@ -425,11 +469,23 @@ public class Plugin : BaseUnityPlugin
                     Config.Bind(
                         "Synced Paths",
                         syncPath.name.Replace("\\", "/"),
-                        syncPath.enabled,
+                        // Seed the toggle DEFAULT from the installed state: an opt-in mod the
+                        // player already has defaults to CHECKED (kept, not flagged for removal);
+                        // one they don't have defaults to unchecked. `enabled:true` paths stay on.
+                        // Only the FIRST bind uses this default — the saved value wins afterwards.
+                        syncPath.enabled || (!IsHeadless && IsInstalledLocally(syncPath.path)),
                         new ConfigDescription(
                             $"Should the mod attempt to sync files from {syncPath.path.Replace("\\", "/")}",
                             null,
-                            new ConfigurationManagerAttributes { ReadOnly = syncPath.enforced }
+                            new ConfigurationManagerAttributes
+                            {
+                                ReadOnly = syncPath.enforced,
+                                // Only opt-in (enabled:false, non-enforced) paths are things a
+                                // player chooses — show just those in F12. Builtins, catch-alls,
+                                // enforced and enabled:true paths are hidden (they still function,
+                                // they're just not user-selectable clutter in the menu).
+                                Browsable = !syncPath.enabled && !syncPath.enforced,
+                            }
                         )
                     )
                 ))
@@ -549,8 +605,12 @@ public class Plugin : BaseUnityPlugin
         Logger.LogDebug("Hashing local files");
         var localModFilesTask = Sync.HashLocalFiles(
             Directory.GetCurrentDirectory(),
-            EnabledSyncPaths,
-            exclusions.Select(Glob.Create).ToList()
+            syncPaths, // ALL paths, so disabled overrides claim (carve out) their own files
+            exclusions.Select(Glob.Create).ToList(),
+            // Must match ProcessedSyncPaths membership. Headless treats every path as active;
+            // players use toggle/enforced, PLUS any deselected path they previously synced (so
+            // its local files are hashed and can be uninstalled).
+            isActive: syncPath => IsHeadless || configSyncPathToggles[syncPath.path].Value || syncPath.enforced || previousSync.ContainsKey(syncPath.path)
         );
 
         yield return new WaitUntil(() => localModFilesTask.IsCompleted);
@@ -583,11 +643,16 @@ public class Plugin : BaseUnityPlugin
             var remoteHashes = remoteHashesTask.Result;
 
             var localExclusionsForRemote = localExclusions.Select(Glob.CreateNoEnd).ToList();
-            remoteModFiles = EnabledSyncPaths
+            remoteModFiles = ProcessedSyncPaths
                 .Select(
                     (syncPath) =>
                     {
-                        var remotePathHashes = remoteHashes[syncPath.path];
+                        // Deselected paths were NOT requested from the server (only EnabledSyncPaths
+                        // is), so they get an empty remote — that's what makes GetRemovedFiles
+                        // uninstall the files ModSync previously installed for them.
+                        if (!remoteHashes.TryGetValue(syncPath.path, out var remotePathHashes))
+                            return new KeyValuePair<string, Dictionary<string, ModFile>>(
+                                syncPath.path, new Dictionary<string, ModFile>(StringComparer.OrdinalIgnoreCase));
 
                         if (!syncPath.enforced)
                             remotePathHashes = remotePathHashes
@@ -647,9 +712,13 @@ public class Plugin : BaseUnityPlugin
         configDeleteRemovedFiles = Config.Bind("General", "Delete Removed Files", true, "Should the mod delete files that have been removed from the server?");
     }
 
+    // These three drive what the update window DRAWS, so they must span the same set the diff
+    // ran over (ProcessedSyncPaths) — not just the enabled set. A deselected path only ever
+    // contributes REMOVED lines, but if we listed it over EnabledSyncPaths its removals would
+    // count towards UpdateCount (opening the window) while rendering nothing: an empty prompt.
     private List<string> _optional;
     private List<string> optional =>
-        _optional ??= EnabledSyncPaths
+        _optional ??= ProcessedSyncPaths
             .Where(syncPath => !syncPath.enforced)
             .SelectMany(syncPath =>
                 addedFiles[syncPath.path]
@@ -662,7 +731,7 @@ public class Plugin : BaseUnityPlugin
 
     private List<string> _required;
     private List<string> required =>
-        _required ??= EnabledSyncPaths
+        _required ??= ProcessedSyncPaths
             .Where(syncPath => syncPath.enforced)
             .SelectMany(syncPath =>
                 addedFiles[syncPath.path]
@@ -675,7 +744,7 @@ public class Plugin : BaseUnityPlugin
 
     private List<string> _noRestart;
     private List<string> noRestart =>
-        _noRestart ??= EnabledSyncPaths
+        _noRestart ??= ProcessedSyncPaths
             .Where(syncPath => !syncPath.restartRequired)
             .SelectMany(syncPath =>
                 addedFiles[syncPath.path]

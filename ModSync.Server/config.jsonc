@@ -33,14 +33,22 @@
     //
     // Paths are matched MOST-SPECIFIC FIRST, so you can set defaults on a folder
     // and override just one child inside it (e.g. enforce a single config file).
+    //
+    // TWO WAYS TO USE THIS (it's one dial, not two modes — see the wiki):
+    //   Lazy    — keep just the 3 catch-alls below; everything syncs and each
+    //             player declines what they don't want via their own
+    //             ModSync_Data/Exclusions.jsonc. Best for large modsets.
+    //   Curated — ALSO name mods as objects with "enabled": false; those appear
+    //             in the player's F12 menu as opt-IN toggles. Best for slim sets.
+    //   Mix     — name the few you want optional; the catch-alls cover the rest.
     "syncPaths": [
         "../BepInEx/plugins",
         "../BepInEx/patchers",
         "../BepInEx/config"
 
-        // ── Object-form example (uncomment & adapt) ──
-        // Force every client to match the server's patchers exactly — a version
-        // mismatch on a patcher DLL can otherwise leave a client silently stuck:
+        // ── Object-form examples (uncomment & adapt) ──
+        // Enforce patchers — a version mismatch on a patcher DLL can otherwise
+        // leave a client silently stuck:
         //
         // {
         //     "path": "../BepInEx/patchers",
@@ -48,7 +56,9 @@
         //     "enforced": true
         // }
         //
-        // Opt-in extra (off unless the client ticks it), applied without a restart:
+        // Opt-IN mod — shows in the F12 menu unticked; the player ticks it to
+        // receive it. A mod's plugin and config are SEPARATE paths, so to make
+        // its config optional too, add its ../BepInEx/config file the same way:
         //
         // {
         //     "path": "../BepInEx/plugins/SomeOptionalMod",
@@ -65,9 +75,14 @@
     // overwritten, and the universal `.nosync` opt-out pattern.
     // See the wiki [exclusions] for guidance on what belongs here.
     "exclusions": [
-        // SPT Installer files — not "mods", they come with the SPT install
+        // SPT / BepInEx baseline — NOT mods. These ship with SPT (or are
+        // generated per-machine by BepInEx), so every client already has its
+        // own. ModSync doesn't manage SPT itself, and an SPT update replaces
+        // them — never push the host's copies over a client's.
         "../BepInEx/plugins/spt",
         "../BepInEx/patchers/spt-prepatch.dll",
+        "../BepInEx/config/BepInEx.cfg",
+        "../BepInEx/config/com.bepis.bepinex.configurationmanager.cfg",
 
         // Fika headless DLL — must never reach regular players. Headless
         // instances get this from their image / manual install, not via sync.
