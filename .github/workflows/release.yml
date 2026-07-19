@@ -137,4 +137,9 @@ jobs:
 
             Upgrading leaves one dead entry, `(Builtin) Managed Files`, in each client's `BepInEx/config/corter.modsync.cfg`. It is unbound and does nothing; delete the line if it bothers you.
 
+            ## Docs
+
+            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/Configuration#mods-that-replace-base-game-files) — how `baseFiles` backs up and restores originals, and why a hand-installed mod gets locked
+            - [Usage Examples](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/UsageExamples) — worked `config.jsonc` setups, from minimal to a real server
+
             **Coming from before v0.12.4?** See the v0.12.4 notes for the one-time `BepInEx/patchers/Corter-ModSync/` folder cleanup on the server/headless.
