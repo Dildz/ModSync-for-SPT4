@@ -104,9 +104,13 @@
         // }
         //
         // Known issue with this mod (not ModSync): it extends the game's DLSS
-        // settings, so a Graphics.ini written while it was active can hang the
-        // client on the loading screen. If that happens, rename
-        // user/sptSettings/Graphics.ini and let the game rebuild it.
+        // presets, and a "Default" preset gets written in a form the game can
+        // no longer read back, hanging the client on the loading screen. Tell
+        // players to pick an explicit DLSS preset (not "Default") BEFORE the
+        // mod installs. If a client does hang, edit the "DLSSPreset" line in
+        // user/sptSettings/Graphics.ini to a real preset — that keeps their
+        // other graphics settings. Removing the mod also leaves the preset on
+        // a mod-added value, so the same edit applies.
         //
         // DynamicMaps — replaces two Unity assemblies. Unlike the DLSS DLL these
         // CANNOT be re-downloaded, so a hand-installed copy is unrecoverable.

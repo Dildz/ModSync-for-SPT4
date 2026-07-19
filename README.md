@@ -80,6 +80,8 @@ and different modes of operation.
 - [x] Headless client support — `headlessIncludes` allowlist serves only the plugins a headless instance needs
 - [x] BepInEx preloader patcher — applies staged updates on headless before any DLLs are locked, replacing the Updater for Docker/Linux
 - [x] `managedIncludes` — sync `EscapeFromTarkov_Data/Managed/` assemblies to players via filename allowlist
+- [x] `baseFiles` — sync mods that replace base-game files, backing the original up and restoring it on removal
+- [x] Per-syncPath `headless` gate — withhold graphics-only mods from headless clients entirely
 - [x] Real tests?!? (low priority)
 - [ ] Allow user to upload their local mods folders to host (needs some form of authorization)
 - [ ] Buttons to sync from the BepInEx config menu (F12)
