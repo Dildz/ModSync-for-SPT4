@@ -636,6 +636,112 @@ public class HashLocalFilesTests
     // applies player exclusions at all (filter moved to the remote-list step in
     // Plugin.cs). The enforced flag's remaining role is to bypass the remote-list
     // filter, exercised in IntegrationTests.TestEnforcedBypassesLocalExclusions.
+
+    [Test]
+    public void TestHashLocalFiles_BaseFiles_AreHashedWithTheirSyncPath()
+    {
+        // baseFiles live OUTSIDE the mod's folder (a base-game file it replaces), but belong
+        // to its syncpath for diff purposes. If the local walk missed them the local side
+        // would look empty for those paths and the diff would re-download them every launch.
+        var dir = TestUtils.GetTemporaryDirectory();
+        try
+        {
+            var modDir = Path.Combine(dir, "patchers", "TarkovDLSS45");
+            var nativeDir = Path.Combine(dir, "EscapeFromTarkov_Data", "Plugins", "x86_64");
+            Directory.CreateDirectory(modDir);
+            Directory.CreateDirectory(nativeDir);
+            File.WriteAllText(Path.Combine(modDir, "TarkovDLSS45.dll"), "mod");
+            File.WriteAllText(Path.Combine(nativeDir, "nvngx_dlss.dll"), "replaced-base-file");
+
+            var baseFile = Path.Combine("EscapeFromTarkov_Data", "Plugins", "x86_64", "nvngx_dlss.dll");
+            var syncPath = new SyncPath(
+                Path.Combine("patchers", "TarkovDLSS45"),
+                enabled: false,
+                baseFiles: [baseFile]);
+
+            var result = Sync.HashLocalFiles(dir, [syncPath], [], isActive: _ => true).Result;
+
+            var files = result[syncPath.path].Keys.Select(k => k.Replace('\\', '/')).ToList();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(files, Has.Some.Contains("nvngx_dlss.dll"),
+                    "the mod's baseFile must be hashed under its syncpath");
+                Assert.That(files, Has.Some.Contains("TarkovDLSS45.dll"),
+                    "the mod's own files must still be hashed");
+            });
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Test]
+    public void TestHashLocalFiles_BaseFiles_InactivePathNotReturned()
+    {
+        // Opted out: neither the mod's folder nor its baseFile may appear in the local set,
+        // or the diff would flag them for removal — which for a base-game file is exactly the
+        // destructive outcome the whole baseFiles/.modsync-bak design exists to prevent.
+        var dir = TestUtils.GetTemporaryDirectory();
+        try
+        {
+            var modDir = Path.Combine(dir, "patchers", "TarkovDLSS45");
+            var nativeDir = Path.Combine(dir, "EscapeFromTarkov_Data", "Plugins", "x86_64");
+            Directory.CreateDirectory(modDir);
+            Directory.CreateDirectory(nativeDir);
+            File.WriteAllText(Path.Combine(modDir, "TarkovDLSS45.dll"), "mod");
+            File.WriteAllText(Path.Combine(nativeDir, "nvngx_dlss.dll"), "replaced-base-file");
+
+            var baseFile = Path.Combine("EscapeFromTarkov_Data", "Plugins", "x86_64", "nvngx_dlss.dll");
+            var syncPath = new SyncPath(
+                Path.Combine("patchers", "TarkovDLSS45"),
+                enabled: false,
+                baseFiles: [baseFile]);
+
+            var result = Sync.HashLocalFiles(dir, [syncPath], [], isActive: _ => false).Result;
+
+            Assert.That(result, Does.Not.ContainKey(syncPath.path),
+                "an opted-out path must not be returned at all, baseFiles included");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Test]
+    public void TestHashLocalFiles_BaseFile_MissingOnDisk_IsSkipped()
+    {
+        // A player who never installed the mod has no replaced base file. That must hash
+        // cleanly rather than throwing — it's the normal state for most of the playerbase.
+        var dir = TestUtils.GetTemporaryDirectory();
+        try
+        {
+            var modDir = Path.Combine(dir, "patchers", "TarkovDLSS45");
+            Directory.CreateDirectory(modDir);
+            File.WriteAllText(Path.Combine(modDir, "TarkovDLSS45.dll"), "mod");
+
+            var syncPath = new SyncPath(
+                Path.Combine("patchers", "TarkovDLSS45"),
+                enabled: false,
+                baseFiles: [Path.Combine("EscapeFromTarkov_Data", "Plugins", "x86_64", "nvngx_dlss.dll")]);
+
+            var result = Sync.HashLocalFiles(dir, [syncPath], [], isActive: _ => true).Result;
+
+            var files = result[syncPath.path].Keys.Select(k => k.Replace('\\', '/')).ToList();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(files, Has.None.Contains("nvngx_dlss.dll"));
+                Assert.That(files, Has.Some.Contains("TarkovDLSS45.dll"));
+            });
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
 }
 
 [TestFixture]

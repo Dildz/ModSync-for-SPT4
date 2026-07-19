@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using ModSync.Utility;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Common;
+using SPTarkov.Server.Core.Models.Logging;
 using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.DI;
 using SPTarkov.Server.Core.Servers.Http;
@@ -154,21 +155,68 @@ public class ModSyncHttpListener(
         // The client appends ?headless=1 here exactly as it does on /hashes.
         var isHeadless = context.Request.Query.ContainsKey("headless");
 
-        // Project to anonymous objects so we can rewrite paths to the wire format
-        // without mutating the shared SyncPath instances (they're held by Config).
-        // Pipeline per path: WinPath (normalize separators) → ToWirePath (translate
-        // server-cwd-relative → game-root-relative).
-        var winPaths = _config!.SyncPaths.ConvertAll(sp => new
-        {
-            path = PathExt.ToWirePath(PathExt.WinPath(sp.path)),
-            name = sp.name,
-            enabled = sp.enabled,
-            enforced = ConfigUtil.ResolveEnforced(sp, isHeadless),
-            silent = sp.silent,
-            restartRequired = sp.restartRequired,
-        });
+        // Version gate. A client only gets the full config if it announces a version matching
+        // ours; anything else — a different version, or a pre-0.12.6 client that doesn't send
+        // one at all — receives ONLY ModSync's own components.
+        //
+        // This is what makes self-update-first work for clients that don't yet have the
+        // self-update-first code. A v0.12.5 client computes its whole diff (including
+        // REMOVALS) from the paths we hand it, so handing it only builtins makes it
+        // structurally incapable of proposing to delete a mod. It updates ModSync, restarts,
+        // and comes back speaking our version.
+        var clientVersion = context.Request.Query.TryGetValue("version", out var v) ? v.ToString() : null;
+        var versionMatches = clientVersion == _modVersion;
 
-        await WriteJsonAsync(context, 200, winPaths);
+        if (!versionMatches)
+            logger.LogWithColor(
+                $"Corter-ModSync: client reports version '{clientVersion ?? "unknown"}' (server is {_modVersion}) "
+                + "— serving ModSync's own components only until it updates.",
+                LogTextColor.Gray);
+
+        await WriteJsonAsync(context, 200, BuildPathsResponse(_config!.SyncPaths, isHeadless, versionMatches));
+    }
+
+    /// <summary>
+    /// Builds the /modsync/paths payload. Pure function, split out from the HTTP handler so the
+    /// audience rules can be tested without HTTP plumbing — a mismatch between what this
+    /// advertises and what <see cref="SyncUtil.HashModFilesAsync"/> serves once shipped a
+    /// KeyNotFoundException to every headless client, and nothing caught it.
+    ///
+    /// Per path: WinPath (normalize separators) → ToWirePath (server-cwd-relative →
+    /// game-root-relative). Projected into a DTO rather than mutating the shared SyncPath
+    /// instances, which are held by Config. Member names are lowercase on purpose — the
+    /// serializer applies no naming policy, so these are the literal JSON keys the client
+    /// deserializes by name.
+    /// </summary>
+    public static List<SyncPathDto> BuildPathsResponse(List<SyncPath> syncPaths, bool isHeadless, bool versionMatches = true)
+    {
+        // Version mismatch: hand back only ModSync's own components. The client then has
+        // nothing else it could act on, so it updates itself and restarts. See HandlePathsAsync.
+        if (!versionMatches)
+            syncPaths = syncPaths.FindAll(sp => Builtins.IsBuiltinWirePath(PathExt.ToWirePath(PathExt.WinPath(sp.path))));
+
+        // Don't advertise a path we will never serve to this audience. HashModFilesAsync skips
+        // `headless:false` paths for headless clients, so listing them here would leave a
+        // client asking for a path that comes back with no entry at all — which older clients
+        // (<=0.12.5) index directly and throw KeyNotFoundException on, failing ModSync's load.
+        // Filtering at the source keeps both endpoints telling the same story.
+        var visiblePaths = isHeadless
+            ? syncPaths.FindAll(sp => sp.headless)
+            : syncPaths;
+
+        return visiblePaths.ConvertAll(sp => new SyncPathDto(
+            path: PathExt.ToWirePath(PathExt.WinPath(sp.path)),
+            name: sp.name,
+            enabled: sp.enabled,
+            // The Updater (desktop players) and patcher (headless) are each enforced for the
+            // audience that runs them and relaxed for the other.
+            enforced: ConfigUtil.ResolveEnforced(sp, isHeadless),
+            silent: sp.silent,
+            restartRequired: sp.restartRequired,
+            headless: sp.headless,
+            // baseFiles go over the wire game-root-relative, same as `path`, so the client can
+            // resolve them against its own cwd when checking for .modsync-bak ownership.
+            baseFiles: sp.baseFiles.ConvertAll(bf => PathExt.ToWirePath(PathExt.WinPath(bf)))));
     }
 
     /// <summary>
@@ -280,3 +328,20 @@ public class ModSyncHttpListener(
         await context.Response.Body.WriteAsync(bytes);
     }
 }
+
+/// <summary>
+/// Wire shape of one entry in GET /modsync/paths.
+///
+/// Member names are deliberately lowercase: <see cref="ModSyncHttpListener"/> serializes with
+/// no naming policy, so these are the literal JSON keys, and the client's SyncPath constructor
+/// is matched against them by name. Renaming a member here silently breaks that binding.
+/// </summary>
+public record SyncPathDto(
+    string path,
+    string name,
+    bool enabled,
+    bool enforced,
+    bool silent,
+    bool restartRequired,
+    bool headless,
+    List<string> baseFiles);

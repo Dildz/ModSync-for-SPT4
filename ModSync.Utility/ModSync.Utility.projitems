@@ -12,6 +12,7 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Builtins.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Glob.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ImoHash.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)LongPath.cs" />

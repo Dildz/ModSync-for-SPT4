@@ -54,6 +54,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         return p == "../EscapeFromTarkov_Data/Managed" || p.StartsWith("../EscapeFromTarkov_Data/Managed/", StringComparison.Ordinal);
     }
 
+
     /// <summary>
     /// Recursive directory walk. Yields the path of every file we'd consider syncing,
     /// applying the configured exclusions as we go. Also yields any empty directory's
@@ -167,18 +168,6 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     /// universal exclusions. Enforced syncpaths bypass the allowlist so ModSync itself can
     /// always self-update on headless.
     /// </summary>
-    // Hardcoded edge case: DynamicMaps is (so far) the only SPT4 mod that ships
-    // EscapeFromTarkov_Data/Managed files — modified base-game Unity DLLs that REPLACE the
-    // originals (DM won't run on the originals; the originals won't run DM's modified base
-    // behaviour cleanly either). They must only reach a client that actually runs DM,
-    // otherwise an opt-out client ends up with DM's modified engine DLLs and no DM plugin.
-    // managedIncludes has no opt-in concept, so we gate these two files on the DM plugin
-    // syncpath's active state. When DM is opted out, we withhold them — the client then
-    // restores its .modsync-bak originals (back to vanilla).
-    private const string DynamicMapsPluginPath = "../BepInEx/plugins/DynamicMaps";
-    private static readonly string[] DynamicMapsManagedFiles =
-        ["Unity.VectorGraphics.dll", "Unity.InternalAPIEngineBridge.003.dll"];
-
     public async Task<Dictionary<string, Dictionary<string, ModFile>>> HashModFilesAsync(
         IEnumerable<SyncPath> syncPaths,
         bool isHeadless = false,
@@ -190,11 +179,6 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         // and returned. Default: everything active.
         isActive ??= _ => true;
 
-        // DM is "opted out" for this request when its plugin syncpath is present but inactive.
-        // When so, its Managed DLLs are withheld from the served list below.
-        var dynamicMapsOptedOut = syncPaths.Any(sp =>
-            PathExt.WinPath(sp.path).Equals(PathExt.WinPath(DynamicMapsPluginPath), StringComparison.OrdinalIgnoreCase)
-            && !isActive(sp));
 
         var result = new Dictionary<string, Dictionary<string, ModFile>>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -203,7 +187,16 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 
         foreach (var syncPath in syncPaths)
         {
-            var active = isActive(syncPath);
+            // headless:false paths are player-only (e.g. a GPU-specific mod). A headless
+            // ignores the F12 toggles and syncs everything it's offered, so this is the only
+            // way to keep such a mod off it.
+            //
+            // Treated as INACTIVE rather than skipped outright: the loop below still claims
+            // its files for ownership, it just never serves them. Skipping the path entirely
+            // would leave its files unclaimed, and an enclosing catch-all (../BepInEx/patchers
+            // for a prepatcher-based mod) would then walk over and serve them to the headless
+            // anyway — the exact leak the ownership-claiming design exists to prevent.
+            var active = isActive(syncPath) && !(isHeadless && !syncPath.headless);
             var perPath = new Dictionary<string, ModFile>();
 
             // Decide once per syncpath which allowlist gates apply.
@@ -242,15 +235,32 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
                         ? config.IsHeadlessManagedAllowed(fileName)
                         : config.IsManagedAllowed(fileName);
 
-                    // Withhold DM's Managed DLLs when DM is opted out (see DynamicMapsManagedFiles).
-                    if (allowed && dynamicMapsOptedOut
-                        && DynamicMapsManagedFiles.Any(f => f.Equals(fileName, StringComparison.OrdinalIgnoreCase)))
-                        allowed = false;
-
                     if (!allowed) continue;
                 }
 
                 perPath[winFile] = await BuildModFileAsync(file);
+                filesHashed++;
+            }
+
+            // baseFiles: base-game files this mod REPLACES, living outside its own folder.
+            // They ride the syncpath's active state, so a player who opted out never receives
+            // them — that's the whole point of binding them to the mod rather than to a
+            // separate always-on allowlist (the flaw that made DynamicMaps a special case).
+            // Claimed for ownership even when inactive, so an enclosing Managed/plugins
+            // catch-all can't re-serve them behind the opt-out's back.
+            foreach (var baseFile in syncPath.baseFiles)
+            {
+                var winBase = PathExt.WinPath(baseFile);
+                if (!seen.Add(winBase)) continue;
+                if (!active) continue;
+
+                if (!File.Exists(baseFile))
+                {
+                    logger.Warning($"Corter-ModSync: baseFile '{baseFile}' for syncpath '{syncPath.path}' does not exist, skipping.");
+                    continue;
+                }
+
+                perPath[winBase] = await BuildModFileAsync(baseFile);
                 filesHashed++;
             }
 
@@ -285,6 +295,21 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
             if (!rel.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(rel))
             {
                 return requested;
+            }
+
+            // baseFiles are the one thing a syncpath owns that lives OUTSIDE its own folder
+            // (e.g. ../BepInEx/patchers/TarkovDLSS45 declaring nvngx_dlss.dll over in
+            // EscapeFromTarkov_Data/Plugins/x86_64), so they can never satisfy the containment
+            // check above. Without this they get offered in the hash list and then refused on
+            // download — the client retries forever and the mod never installs.
+            //
+            // EXACT full-path match only: these are admin-declared in config, never derived
+            // from the request, so this widens the allowlist by precisely the files the server
+            // already chose to serve — no traversal surface.
+            foreach (var baseFile in sp.baseFiles)
+            {
+                if (Path.GetFullPath(Path.Combine(serverRoot, baseFile)) == requested)
+                    return requested;
             }
         }
 

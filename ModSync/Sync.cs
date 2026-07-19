@@ -58,6 +58,25 @@ public static class Sync
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
     }
 
+    /// <summary>
+    /// Overlay <paramref name="current"/> onto <paramref name="previous"/>: paths this run
+    /// covered get their fresh record, every other path keeps the one it had.
+    ///
+    /// Only used on a self-update run, where <paramref name="current"/> holds nothing but
+    /// ModSync's own components. Writing that wholesale would drop every mod path's record,
+    /// and since PreviousSync is what licenses a removal, the next launch would silently
+    /// refuse to uninstall anything the player un-ticked.
+    /// </summary>
+    public static SyncPathModFiles MergePreviousSync(SyncPathModFiles previous, SyncPathModFiles current)
+    {
+        var merged = new SyncPathModFiles(previous, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var kvp in current)
+            merged[kvp.Key] = kvp.Value;
+
+        return merged;
+    }
+
     public static SyncPathFileList GetRemovedFiles(
         List<SyncPath> syncPaths,
         SyncPathModFiles localModFiles,
@@ -187,7 +206,16 @@ public static class Sync
             // diff so GetRemovedFiles can uninstall it (when previousSync says ModSync
             // installed it). Filtering it out of the local walk would hide it from the
             // diff and the file would stay forever.
+            // baseFiles are base-game files this mod REPLACES, living outside its own folder
+            // (e.g. nvngx_dlss.dll). They belong to this syncpath for diff purposes, so append
+            // them to the walk — otherwise the local side would look empty for those paths and
+            // the diff would re-download them on every launch.
+            var baseFilePaths = syncPath.baseFiles
+                .Select(bf => Path.Combine(basePath, bf))
+                .Where(File.Exists);
+
             var candidates = GetFilesInDirectory(basePath, path, remoteExclusions)
+                .Concat(baseFilePaths)
                 .Where(file => !processedFiles.ContainsKey(file));
 
             // Inactive path: claim its files (so an enclosing catch-all can't pick them up)

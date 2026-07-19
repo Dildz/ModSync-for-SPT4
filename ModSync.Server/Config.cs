@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using ModSync.Utility;
 using SPTarkov.DI.Annotations;
+using SPTarkov.Server.Core.Models.Logging;
 using SPTarkov.Server.Core.Models.Utils;
 
 namespace ModSync.Server;
@@ -48,6 +49,7 @@ public class Config(
     private readonly HashSet<string> _headlessManagedIncludesSet =
         new(headlessManagedIncludes, StringComparer.OrdinalIgnoreCase);
 
+
     /// <summary>True if filePath matches any of the configured exclusion globs.</summary>
     public bool IsExcluded(string filePath)
     {
@@ -83,6 +85,7 @@ public class Config(
 
     /// <summary>Same as IsManagedAllowed but for headless clients.</summary>
     public bool IsHeadlessManagedAllowed(string fileName) => _headlessManagedIncludesSet.Contains(fileName);
+
 }
 
 /// <summary>
@@ -146,7 +149,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             //                        is just shorthand for an object with every option at
             //                        its default.
             //
-            // The five options:
+            // The seven options:
             //
             //     "path"            (required)        Folder or file to sync. Globs NOT allowed.
             //     "name"            (default: path)   Friendly label shown in the client's F12 sync menu.
@@ -158,6 +161,16 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             //     "restartRequired" (default: true)   Must the client restart after these files update?
             //     "silent"          (default: false)  false = show the client a prompt of changes.
             //                                         true  = apply quietly in the background on load.
+            //     "headless"        (default: true)   false = NEVER send to a Fika headless client.
+            //                                         Headless has no F12 menu so it ignores the opt-in
+            //                                         toggles and takes everything offered — this is the
+            //                                         only way to mark a mod player-only (GPU/UI mods).
+            //     "baseFiles"       (default: none)   Base-game files this mod REPLACES, living outside
+            //                                         its own folder. They follow this entry's opt-in
+            //                                         state, so opted-out players never receive them.
+            //                                         The original is saved as <file>.modsync-bak and
+            //                                         restored if the mod is later removed. See the
+            //                                         "mods that replace base-game files" note below.
             //
             // Paths are matched MOST-SPECIFIC FIRST, so you can set defaults on a folder
             // and override just one child inside it (e.g. enforce a single config file).
@@ -194,6 +207,53 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 //     "enabled": false,
                 //     "restartRequired": false
                 // }
+                //
+                // ── Mods that REPLACE base-game files ──
+                // Some mods ship modified copies of files the game itself installs, rather
+                // than adding their own. Those files must follow the mod's opt-in state, or
+                // a player who declined the mod ends up with its modified engine files and
+                // no mod — a broken install. List them in "baseFiles" and ModSync backs the
+                // original up as <file>.modsync-bak, restoring it if the mod is removed.
+                //
+                // IMPORTANT: if a player installed the mod BY HAND, no backup exists, so
+                // ModSync has no original to put back. It then refuses to remove that mod at
+                // all and says so in the F12 menu — deleting a base-game file it never
+                // replaced could break the client beyond repair.
+                //
+                // Tarkov DLSS 4.5 — replaces the NVIDIA runtime DLL. Only benefits RTX
+                // 3000-series and newer, and is useless on a headless, so: opt-in + no
+                // headless. One entry covers BOTH halves of the mod:
+                //
+                // {
+                //     "path": "../BepInEx/patchers/TarkovDLSS45",
+                //     "name": "(Optional) Tarkov DLSS 4.5",
+                //     "enabled": false,
+                //     "headless": false,
+                //     "baseFiles": [
+                //         "../EscapeFromTarkov_Data/Plugins/x86_64/nvngx_dlss.dll"
+                //     ]
+                // }
+                //
+                // Known issue with this mod (not ModSync): it extends the game's DLSS
+                // settings, so a Graphics.ini written while it was active can hang the
+                // client on the loading screen. If that happens, rename
+                // user/sptSettings/Graphics.ini and let the game rebuild it.
+                //
+                // DynamicMaps — replaces two Unity assemblies. Unlike the DLSS DLL these
+                // CANNOT be re-downloaded, so a hand-installed copy is unrecoverable.
+                // headless:false — a headless renders nothing, so a map overlay is dead
+                // weight there, and it must never receive DM's replacement assemblies:
+                //
+                // {
+                //     "path": "../BepInEx/plugins/DynamicMaps",
+                //     "name": "(Optional) Dynamic Maps",
+                //     "enabled": false,
+                //     "headless": false,
+                //     "baseFiles": [
+                //         "../EscapeFromTarkov_Data/Managed/Unity.VectorGraphics.dll",
+                //         "../EscapeFromTarkov_Data/Managed/Unity.InternalAPIEngineBridge.003.dll"
+                //     ]
+                // }
             ],
 
             //-----------------------------------------------------------------------
@@ -215,6 +275,10 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 // Fika headless DLL — must never reach regular players. Headless
                 // instances get this from their image / manual install, not via sync.
                 "../BepInEx/plugins/Fika/Fika.Headless.dll",
+
+                // Raid-Review DLL — must never reach regular players. Headless
+                // instances get this from the 'headlessIncludes allow list'.
+                // "../BepInEx/plugins/RAID_REVIEW.dll",
 
                 // Universal per-file opt-out — drop a `.nosync` or `.nosync.txt` file
                 // next to any mod folder/file to skip it
@@ -325,16 +389,103 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
 
         if (!File.Exists(configPath))
         {
-            logger.Info($"Corter-ModSync: no config.jsonc found at {configPath}, writing defaults.");
+            logger.LogWithColor($"Corter-ModSync: no config.jsonc found at {configPath}, writing defaults.", LogTextColor.Gray);
             await File.WriteAllTextAsync(configPath, DefaultConfig);
+        }
+
+        // Always drop a read-only reference copy of the CURRENT defaults next to the live
+        // config. An existing config.jsonc is never overwritten (an admin's syncPaths /
+        // headlessIncludes are irreplaceable), which also means they'd otherwise never see
+        // options or exclusions added in a later version. This gives them something to diff
+        // against. Written unconditionally so the reference can't go stale; it lives under
+        // user/mods, which ModSync never walks, so it can't leak to clients.
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(GetModDirectory(), "config_default.jsonc"), DefaultConfig);
+        }
+        catch (Exception e)
+        {
+            // Reference-only — never block startup over it.
+            logger.LogWithColor($"Corter-ModSync: could not write config_default.jsonc: {e.Message}", LogTextColor.Gray);
         }
 
         var text = await File.ReadAllTextAsync(configPath);
         var raw = JsonSerializer.Deserialize<RawConfig>(text, JsoncOptions)
             ?? throw new InvalidOperationException("Corter-ModSync: config.jsonc parsed to null (file is empty or malformed).");
 
+        NotifyAboutMissingOptions(text);
+
         return raw;
     }
+
+    /// <summary>
+    /// Name any top-level options the admin's config predates, so a new feature isn't invisible
+    /// to everyone who already had a config.jsonc (which is never overwritten).
+    ///
+    /// Deliberately only NOTIFIES — it does not rewrite the file. Merging the missing block in
+    /// would be doable (it's text), but the config is hand-curated and heavily commented, and
+    /// silently editing someone's 30-line headlessIncludes to add a key they can read about in
+    /// config_default.jsonc is a bad trade. Nothing breaks either way: RawConfig defaults every
+    /// key, so a missing option just means that feature is off until they opt in.
+    ///
+    /// Only TOP-LEVEL keys are checked. Per-syncpath options (`headless`, `baseFiles`, …) are
+    /// optional per entry and can't be "missing" — they simply take their default.
+    ///
+    /// Advisory only: any parse trouble here is swallowed, because the real parse already
+    /// succeeded by the time we're called and a cosmetic check must never break startup.
+    /// </summary>
+    private void NotifyAboutMissingOptions(string text)
+    {
+        var missing = MissingTopLevelOptions(text, DefaultConfig);
+        if (missing.Count == 0)
+            return;
+
+        logger.LogWithColor(
+            $"Corter-ModSync: your config.jsonc predates these options: {string.Join(", ", missing)}. "
+            + "Defaults are in use — see config_default.jsonc alongside it for the documented versions.",
+            LogTextColor.Gray);
+    }
+
+    /// <summary>
+    /// Top-level keys present in <paramref name="defaultText"/> but absent from
+    /// <paramref name="configText"/>. Pure so the comparison can be tested directly.
+    /// Returns empty on any parse trouble — see <see cref="NotifyAboutMissingOptions"/>.
+    /// </summary>
+    public static List<string> MissingTopLevelOptions(string configText, string defaultText)
+    {
+        try
+        {
+            var docOptions = new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true,
+            };
+
+            using var theirs = JsonDocument.Parse(configText, docOptions);
+            using var defaults = JsonDocument.Parse(defaultText, docOptions);
+
+            if (theirs.RootElement.ValueKind != JsonValueKind.Object
+                || defaults.RootElement.ValueKind != JsonValueKind.Object)
+                return [];
+
+            var present = theirs.RootElement.EnumerateObject()
+                .Select(p => p.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return defaults.RootElement.EnumerateObject()
+                .Select(p => p.Name)
+                .Where(name => !present.Contains(name))
+                .ToList();
+        }
+        catch
+        {
+            // Cosmetic advisory — never let it affect startup.
+            return [];
+        }
+    }
+
+    /// <summary>Exposed so tests can compare a config against the shipped defaults.</summary>
+    public static string ShippedDefaultConfig => DefaultConfig;
 
     /// <summary>
     /// Pull the .path string out of a syncpath entry (which may be either a bare string
@@ -414,6 +565,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         const bool defaultEnforced = false;
         const bool defaultSilent = false;
         const bool defaultRestartRequired = true;
+        const bool defaultHeadless = true;
 
         var path = ExtractPath(entry);
 
@@ -444,14 +596,20 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 : defaultSilent,
             restartRequired: entry.TryGetProperty("restartRequired", out var rr) && rr.ValueKind != JsonValueKind.Null
                 ? rr.GetBoolean()
-                : defaultRestartRequired);
+                : defaultRestartRequired,
+            headless: entry.TryGetProperty("headless", out var hl) && hl.ValueKind != JsonValueKind.Null
+                ? hl.GetBoolean()
+                : defaultHeadless,
+            baseFiles: entry.TryGetProperty("baseFiles", out var bf) && bf.ValueKind == JsonValueKind.Array
+                ? bf.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!).ToList()
+                : []);
     }
 
     // Server-cwd-relative paths of the two audience-specific builtins. The Updater is a
     // desktop-player tool; the patcher applies updates on headless. ModSyncHttpListener flips
     // their `enforced` flag per audience at serve time via ResolveEnforced.
-    public const string UpdaterSyncPath = "../ModSync.Updater.exe";
-    public const string PatcherSyncPath = "../BepInEx/patchers/Corter-ModSync-Prepatch.dll";
+    public const string UpdaterSyncPath = Builtins.UpdaterPath;
+    public const string PatcherSyncPath = Builtins.PatcherPath;
 
     /// <summary>
     /// Per-audience enforcement for the two audience-specific builtins. The Updater (desktop
@@ -498,12 +656,18 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 path: UpdaterSyncPath,
                 name: "(Builtin) ModSync Updater",
                 enabled: true, enforced: true, silent: true, restartRequired: false),
+            // enabled:false makes this a player-selectable F12 entry rather than a silent
+            // always-on path. The client seeds an opt-in toggle's default from the INSTALLED
+            // state, so a player who has the patcher (it ships in the release zip) still gets
+            // it checked by default — unchecking it is what removes the file they never run.
+            // Headless is unaffected: ResolveEnforced enforces this path for headless, and a
+            // headless ignores toggles entirely and syncs every configured path.
             new(
                 path: PatcherSyncPath,
                 name: "(Builtin) ModSync Patcher",
-                enabled: true, enforced: false, silent: true, restartRequired: true),
+                enabled: false, enforced: false, silent: true, restartRequired: true),
             new(
-                path: "../BepInEx/plugins/Corter-ModSync",
+                path: Builtins.PluginPath,
                 name: "(Builtin) ModSync Plugin",
                 enabled: true, enforced: true, silent: true, restartRequired: true),
         };
@@ -518,6 +682,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 name: "(Builtin) Managed Files",
                 enabled: true, enforced: false, silent: false, restartRequired: true));
         }
+
 
         var userPaths = raw.SyncPaths.ConvertAll(BuildSyncPath);
 

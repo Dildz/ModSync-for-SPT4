@@ -8,10 +8,19 @@ namespace ModSync.Updater;
 
 public static class Updater
 {
-    // True if the path (absolute or relative) is inside EscapeFromTarkov_Data/Managed/.
-    // Normalizes separators so it matches on Windows regardless of how the path was built.
-    private static bool IsInManagedFolder(string path) =>
-        path.Replace('\\', '/').Contains("EscapeFromTarkov_Data/Managed/", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Folders holding BASE-GAME files that mods replace rather than add to. Files here get
+    /// backed up to .modsync-bak before being overwritten, and restored (never deleted) on
+    /// removal — losing one of these bricks the client.
+    ///   • Managed/          — Unity assemblies (DynamicMaps replaces two of them)
+    ///   • Plugins/x86_64/   — native Unity plugins (Tarkov DLSS 4.5 replaces nvngx_dlss.dll)
+    /// </summary>
+    private static bool IsInProtectedBaseFolder(string path)
+    {
+        var p = path.Replace('\\', '/');
+        return p.Contains("EscapeFromTarkov_Data/Managed/", StringComparison.OrdinalIgnoreCase)
+            || p.Contains("EscapeFromTarkov_Data/Plugins/x86_64/", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static void MoveFilesRecursively(string source, string target) => MoveFilesRecursively(new DirectoryInfo(source), new DirectoryInfo(target));
 
@@ -30,8 +39,8 @@ public static class Updater
             var srcExt = LongPath.Extended(file.FullName);
             var destExt = LongPath.Extended(destPath);
 
-            // Back up any existing Managed file before overwriting.
-            if (File.Exists(destExt) && IsInManagedFolder(destPath))
+            // Back up any existing base-game file before overwriting (Managed / Plugins.x86_64).
+            if (File.Exists(destExt) && IsInProtectedBaseFolder(destPath))
             {
                 Logger.Log($"Backing up: {destPath}");
                 File.Copy(destExt, LongPath.Extended(destPath + ".modsync-bak"), overwrite: true);
@@ -71,9 +80,18 @@ public static class Updater
                 continue;
 
             var bakPath = file + ".modsync-bak";
-            if (IsInManagedFolder(file) && File.Exists(bakPath))
+            if (IsInProtectedBaseFolder(file))
             {
-                // Restore the backed-up original instead of deleting.
+                // A file here is only ever a REPLACEMENT for a base-game one, and we back the
+                // original up at install time. So a backup means "restore what was here
+                // before"; NO backup means we never installed this and it is base-game —
+                // deleting it would brick the install. Leave it.
+                if (!File.Exists(bakPath))
+                {
+                    Logger.Log($"Skipping delete of base-game file with no backup (leaving in place): {file}");
+                    continue;
+                }
+
                 Logger.Log($"Restoring backup: {file}");
                 File.Move(bakPath, file, overwrite: true);
             }

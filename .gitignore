@@ -10,3 +10,6 @@ coverage
 **/*~
 .vscode
 graphify-out
+# Local staging area for hand-testing builds against the live stack.
+# Contains real client/server files and player settings — never commit.
+_local-test-build

@@ -18,7 +18,7 @@
     //                        is just shorthand for an object with every option at
     //                        its default.
     //
-    // The five options:
+    // The seven options:
     //
     //     "path"            (required)        Folder or file to sync. Globs NOT allowed.
     //     "name"            (default: path)   Friendly label shown in the client's F12 sync menu.
@@ -30,6 +30,16 @@
     //     "restartRequired" (default: true)   Must the client restart after these files update?
     //     "silent"          (default: false)  false = show the client a prompt of changes.
     //                                         true  = apply quietly in the background on load.
+    //     "headless"        (default: true)   false = NEVER send to a Fika headless client.
+    //                                         Headless has no F12 menu so it ignores the opt-in
+    //                                         toggles and takes everything offered — this is the
+    //                                         only way to mark a mod player-only (GPU/UI mods).
+    //     "baseFiles"       (default: none)   Base-game files this mod REPLACES, living outside
+    //                                         its own folder. They follow this entry's opt-in
+    //                                         state, so opted-out players never receive them.
+    //                                         The original is saved as <file>.modsync-bak and
+    //                                         restored if the mod is later removed. See the
+    //                                         "mods that replace base-game files" note below.
     //
     // Paths are matched MOST-SPECIFIC FIRST, so you can set defaults on a folder
     // and override just one child inside it (e.g. enforce a single config file).
@@ -66,6 +76,53 @@
         //     "enabled": false,
         //     "restartRequired": false
         // }
+        //
+        // ── Mods that REPLACE base-game files ──
+        // Some mods ship modified copies of files the game itself installs, rather
+        // than adding their own. Those files must follow the mod's opt-in state, or
+        // a player who declined the mod ends up with its modified engine files and
+        // no mod — a broken install. List them in "baseFiles" and ModSync backs the
+        // original up as <file>.modsync-bak, restoring it if the mod is removed.
+        //
+        // IMPORTANT: if a player installed the mod BY HAND, no backup exists, so
+        // ModSync has no original to put back. It then refuses to remove that mod at
+        // all and says so in the F12 menu — deleting a base-game file it never
+        // replaced could break the client beyond repair.
+        //
+        // Tarkov DLSS 4.5 — replaces the NVIDIA runtime DLL. Only benefits RTX
+        // 3000-series and newer, and is useless on a headless, so: opt-in + no
+        // headless. One entry covers BOTH halves of the mod:
+        //
+        // {
+        //     "path": "../BepInEx/patchers/TarkovDLSS45",
+        //     "name": "(Optional) Tarkov DLSS 4.5",
+        //     "enabled": false,
+        //     "headless": false,
+        //     "baseFiles": [
+        //         "../EscapeFromTarkov_Data/Plugins/x86_64/nvngx_dlss.dll"
+        //     ]
+        // }
+        //
+        // Known issue with this mod (not ModSync): it extends the game's DLSS
+        // settings, so a Graphics.ini written while it was active can hang the
+        // client on the loading screen. If that happens, rename
+        // user/sptSettings/Graphics.ini and let the game rebuild it.
+        //
+        // DynamicMaps — replaces two Unity assemblies. Unlike the DLSS DLL these
+        // CANNOT be re-downloaded, so a hand-installed copy is unrecoverable.
+        // headless:false — a headless renders nothing, so a map overlay is dead
+        // weight there, and it must never receive DM's replacement assemblies:
+        //
+        // {
+        //     "path": "../BepInEx/plugins/DynamicMaps",
+        //     "name": "(Optional) Dynamic Maps",
+        //     "enabled": false,
+        //     "headless": false,
+        //     "baseFiles": [
+        //         "../EscapeFromTarkov_Data/Managed/Unity.VectorGraphics.dll",
+        //         "../EscapeFromTarkov_Data/Managed/Unity.InternalAPIEngineBridge.003.dll"
+        //     ]
+        // }
     ],
 
     //-----------------------------------------------------------------------
@@ -87,6 +144,10 @@
         // Fika headless DLL — must never reach regular players. Headless
         // instances get this from their image / manual install, not via sync.
         "../BepInEx/plugins/Fika/Fika.Headless.dll",
+
+        // Raid-Review DLL — must never reach regular players. Headless
+        // instances get this from the 'headlessIncludes allow list'.
+        // "../BepInEx/plugins/RAID_REVIEW.dll",
 
         // Universal per-file opt-out — drop a `.nosync` or `.nosync.txt` file
         // next to any mod folder/file to skip it

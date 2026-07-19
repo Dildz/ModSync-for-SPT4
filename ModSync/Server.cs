@@ -172,7 +172,13 @@ public class Server(Version pluginVersion)
         // Append ?headless=1 on headless so the server returns per-audience `enforced` flags
         // (Updater relaxed + patcher enforced for headless; the reverse for players). Without
         // it the server can't tell which side it's serving and would fall back to player defaults.
-        var query = Plugin.IsHeadless ? "?headless=1" : "";
+        // Also announce our version. A server on a different version replies with ONLY ModSync's
+        // own components, so an out-of-date plugin can never act on config it may not understand
+        // — it updates itself, restarts, and gets the full list once the versions agree.
+        // Clients too old to send this are treated as mismatched, which is exactly right.
+        var query = Plugin.IsHeadless ? "?headless=1&" : "?";
+        query += "version=" + Uri.EscapeDataString(Plugin.PluginVersion);
+
         return Json.Deserialize<List<SyncPath>>(await GetJson($"/modsync/paths{query}"));
     }
 

@@ -61,18 +61,34 @@ public static class Patcher
         }
     }
 
-    // True if the game-root-relative path is inside EscapeFromTarkov_Data/Managed/.
-    private static bool IsInManagedFolder(string relPath) =>
-        relPath.Replace('\\', '/').StartsWith("EscapeFromTarkov_Data/Managed/", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Folders holding BASE-GAME files that mods replace rather than add to. Files here get
+    /// backed up to .modsync-bak before being overwritten, and restored (never deleted) on
+    /// removal — losing one of these bricks the client.
+    ///   • Managed/          — Unity assemblies (DynamicMaps replaces two of them)
+    ///   • Plugins/x86_64/   — native Unity plugins (Tarkov DLSS 4.5 replaces nvngx_dlss.dll)
+    /// </summary>
+    private static bool IsInProtectedBaseFolder(string relPath)
+    {
+        var p = relPath.Replace('\\', '/');
+        return p.StartsWith("EscapeFromTarkov_Data/Managed/", StringComparison.OrdinalIgnoreCase)
+            || p.StartsWith("EscapeFromTarkov_Data/Plugins/x86_64/", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Deletes "*.modsync-old" files left behind by a previous boot's locked-file
-    /// replacement. Only BepInEx/ and EscapeFromTarkov_Data/Managed/ can contain them
-    /// (the sync path roots), so the whole game directory isn't walked.
+    /// replacement. Only the sync path roots can contain them, so the whole game directory
+    /// isn't walked. Plugins/x86_64 is included because a native plugin can be locked by the
+    /// running game just like a managed assembly, leaving a renamed-aside file behind.
     /// </summary>
     private static void CleanupOldFiles()
     {
-        string[] roots = [Path.Combine(GameDir, "BepInEx"), Path.Combine(GameDir, "EscapeFromTarkov_Data", "Managed")];
+        string[] roots =
+        [
+            Path.Combine(GameDir, "BepInEx"),
+            Path.Combine(GameDir, "EscapeFromTarkov_Data", "Managed"),
+            Path.Combine(GameDir, "EscapeFromTarkov_Data", "Plugins", "x86_64"),
+        ];
 
         foreach (var root in roots)
         {
@@ -111,7 +127,7 @@ public static class Patcher
             // net472 enforces the 260-char MAX_PATH, and `src` (under ModSync_Data\PendingUpdates\)
             // is the longest path in the whole apply pipeline. Hand every filesystem op the
             // \\?\-extended form so deep installs don't throw DirectoryNotFoundException. `rel`
-            // stays raw — it's only used for logging and the IsInManagedFolder match.
+            // stays raw — it's only used for logging and the IsInProtectedBaseFolder match.
             var srcExt = LongPath.Extended(src);
             var destExt = LongPath.Extended(dest);
 
@@ -128,7 +144,7 @@ public static class Patcher
 
                 Directory.CreateDirectory(LongPath.Extended(Path.GetDirectoryName(dest)));
 
-                if (IsInManagedFolder(rel) && File.Exists(destExt))
+                if (IsInProtectedBaseFolder(rel) && File.Exists(destExt))
                 {
                     File.Copy(destExt, LongPath.Extended(dest + ".modsync-bak"), overwrite: true);
                     Info($"Backed up {rel}");
@@ -189,8 +205,16 @@ public static class Patcher
                     continue;
 
                 var bakPath = fullPath + ".modsync-bak";
-                if (IsInManagedFolder(rel) && File.Exists(bakPath))
+                if (IsInProtectedBaseFolder(rel))
                 {
+                    // No backup means ModSync never installed this file, so it is a base-game
+                    // assembly — deleting it would brick the install. Leave it alone.
+                    if (!File.Exists(bakPath))
+                    {
+                        Info($"Skipping delete of base-game file with no backup (leaving in place): {rel}");
+                        continue;
+                    }
+
                     CopyReplacingLocked(bakPath, fullPath);
                     File.Delete(bakPath);
                     Info($"Restored {rel}");
