@@ -28,13 +28,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Both runtimes: the server projects are net10.0 (SPT 4.1), the rest are still net9.0.
+      # SPT 4.1 targets .NET 10; every project in the solution is net10.0 now.
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: |
-            9.0.x
-            10.0.x
+          dotnet-version: '10.0.x'
 
       - name: Restore dependencies
         # Reads nuget.config (which includes the BepInEx feed) and fetches every
@@ -59,8 +57,12 @@ jobs:
         # contain 5 separate Updater files (.exe + .dll + .deps.json + .runtimeconfig.json
         # + Newtonsoft.Json.dll). Publishing bundles them all into one ~1.6MB .exe.
         #
-        # `--no-self-contained` keeps it framework-dependent (users have .NET 9 runtime
-        # installed), avoiding ~60MB of bundled runtime bloat.
+        # `--no-self-contained` keeps it framework-dependent, avoiding ~60MB of bundled
+        # runtime bloat — which matters here because ModSync syncs this .exe to every client.
+        # It relies on users having the .NET 10 runtime, which SPT 4.1 itself requires:
+        # SPT.Server.runtimeconfig.json asks for Microsoft.NETCore.App 10.0.0. That's why the
+        # Updater must stay on the same major as SPT — .NET does not roll forward across
+        # majors, so a net9 build would refuse to start on a clean 4.1 install.
         run: dotnet publish ModSync.Updater/ModSync.Updater.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true --no-restore --nologo
 
       - name: Stage release artifacts
@@ -68,8 +70,13 @@ jobs:
         #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll              (BepInEx client plugin)
         #   <game>/BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll.config       (binding redirects)
         #   <game>/BepInEx/patchers/Corter-ModSync-Prepatch.dll                      (preloader patcher)
-        #   <game>/SPT/user/mods/Corter-ModSync/ModSync.Server.dll                (server mod)
+        #   <game>/SPT_Runtime/user/mods/Corter-ModSync/ModSync.Server.dll        (server mod)
         #   <game>/ModSync.Updater.exe                                             (single-file updater)
+        #
+        # SPT 4.1 renamed the server folder from SPT/ to SPT_Runtime/ (confirmed by the 4.1.1
+        # release archive's top-level folder and SPTInstaller's SetupClientTask). user/mods/
+        # inside it is unchanged. The client-side paths (BepInEx/, the Updater at the game
+        # root) are unaffected by the rename.
         #
         # NOTE: config.jsonc is deliberately NOT shipped. The server writes it on first boot
         # if it's missing, so bundling it bought nothing but the risk of an admin unzipping an
@@ -83,7 +90,7 @@ jobs:
           $stage = "release-stage"
           New-Item -ItemType Directory -Force -Path "$stage/BepInEx/plugins/Corter-ModSync"  | Out-Null
           New-Item -ItemType Directory -Force -Path "$stage/BepInEx/patchers"               | Out-Null
-          New-Item -ItemType Directory -Force -Path "$stage/SPT/user/mods/Corter-ModSync"    | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/SPT_Runtime/user/mods/Corter-ModSync"    | Out-Null
 
           # Client plugin (bundled into its own subfolder)
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll"        "$stage/BepInEx/plugins/Corter-ModSync/"
@@ -93,12 +100,12 @@ jobs:
           Copy-Item "ModSync.Patcher/bin/Release/net472/Corter-ModSync-Prepatch.dll" "$stage/BepInEx/patchers/"
 
           # Server mod + default config (bundled so admins can edit before first run)
-          Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT/user/mods/Corter-ModSync/"
+          Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT_Runtime/user/mods/Corter-ModSync/"
           # (config.jsonc intentionally not staged — see the layout note above)
 
           # Updater — single-file output from the publish step above. Just the .exe
           # (~1.6MB) with Newtonsoft.Json, deps.json, and runtimeconfig.json all bundled in.
-          Copy-Item "ModSync.Updater/bin/Release/net9.0-windows/win-x64/publish/ModSync.Updater.exe" "$stage/"
+          Copy-Item "ModSync.Updater/bin/Release/net10.0-windows/win-x64/publish/ModSync.Updater.exe" "$stage/"
 
       - name: Create zip
         shell: pwsh

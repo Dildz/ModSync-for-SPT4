@@ -2,7 +2,7 @@
 
   <!--
     BepInEx plugin targeting .NET Framework 4.7.2 — this is what EFT/Unity's Mono runtime expects.
-    Do NOT bump to net8/net9 here; the *server* mod (ModSync.Server) uses .NET 9, but BepInEx client
+    Do NOT bump to net10 here; the *server* mod (ModSync.Server) uses .NET 10, but BepInEx client
     plugins are constrained by the game's runtime.
   -->
   <PropertyGroup>
