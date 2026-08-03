@@ -26,3 +26,17 @@ When a new SPT version requires updated references:
 4. Build, test, commit, ship.
 
 Most SPT patch versions (e.g. 4.0.13 → 4.0.14) won't require this — the existing compiled `Corter-ModSync.dll` stays binary-compatible. Only refresh on detected breakage or when you need a new API.
+
+## Current state (SPT 4.1)
+
+A **major** version bump does require it — SPT 4.1 changed all four `spt-*.dll` and deobfuscated the client.
+
+| DLL(s) | Refreshed for 4.1? | From |
+|---|---|---|
+| `spt-common.dll`, `spt-core.dll`, `spt-custom.dll`, `spt-reflection.dll` | ✅ yes | SPT **4.1.1** release archive, `BepInEx/plugins/spt/` |
+| `Assembly-CSharp.dll` | ✅ yes | `Fika-Plugin` `References/hollowed.dll`, 4.1-era |
+| `Comfort*.dll`, `bsg.console.core.dll`, `Sirenix.Serialization.dll`, `Newtonsoft.Json.dll`, `Unity*.dll` | ⚠️ still 4.0-era | pending a 4.1 game install |
+
+The Unity/BSG/Newtonsoft set tracks the **game build**, not the SPT version, so it usually survives an SPT bump untouched. They're only worth re-copying if the build starts failing on one of them.
+
+A note on `Assembly-CSharp.dll`: Fika's hollowed copy is built from a 4.1.x client, but not necessarily the exact same EFT build as SPT 4.1.1 (their bundled `spt-*.dll` match 4.1.1's sizes but not its hashes). That's fine here — this reference is **build-time only**, ModSync touches just `EFT.UI.PreloaderUI` and `EFT.UI.ConsoleScreen`, and neither appears in SPT's 4.0→4.1 class rename table. At runtime the player's own install provides the real assembly.
