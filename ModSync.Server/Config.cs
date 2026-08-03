@@ -3,8 +3,8 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using ModSync.Utility;
 using SPTarkov.DI.Annotations;
-using SPTarkov.Server.Core.Models.Logging;
-using SPTarkov.Server.Core.Models.Utils;
+using Spectre.Console;
+using SPTarkov.Common.Models.Logging;
 
 namespace ModSync.Server;
 
@@ -393,7 +393,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
 
         if (!File.Exists(configPath))
         {
-            logger.LogWithColor($"Corter-ModSync: no config.jsonc found at {configPath}, writing defaults.", LogTextColor.Gray);
+            logger.LogWithColor($"Corter-ModSync: no config.jsonc found at {configPath}, writing defaults.", Color.Grey);
             await File.WriteAllTextAsync(configPath, DefaultConfig);
         }
 
@@ -410,7 +410,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         catch (Exception e)
         {
             // Reference-only — never block startup over it.
-            logger.LogWithColor($"Corter-ModSync: could not write config_default.jsonc: {e.Message}", LogTextColor.Gray);
+            logger.LogWithColor($"Corter-ModSync: could not write config_default.jsonc: {e.Message}", Color.Grey);
         }
 
         var text = await File.ReadAllTextAsync(configPath);
@@ -447,7 +447,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         logger.LogWithColor(
             $"Corter-ModSync: your config.jsonc predates these options: {string.Join(", ", missing)}. "
             + "Defaults are in use — see config_default.jsonc alongside it for the documented versions.",
-            LogTextColor.Gray);
+            Color.Grey);
     }
 
     /// <summary>

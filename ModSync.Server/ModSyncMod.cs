@@ -1,8 +1,7 @@
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.DI;
-using SPTarkov.Server.Core.Models.External;
 using SPTarkov.Server.Core.Models.Spt.Mod;
-using SPTarkov.Server.Core.Models.Utils;
 
 // Aliases — SemanticVersioning ships its own Version/Range types that shadow System.Version.
 // Aliasing here makes the ModMetadata properties below read cleanly.
@@ -12,45 +11,55 @@ using Version = SemanticVersioning.Version;
 namespace ModSync.Server;
 
 /// <summary>
-/// Mod metadata — SPT 4 replaces the old package.json with a strongly-typed record.
+/// Mod metadata — SPT 4 replaces the old package.json with a strongly-typed contract.
 ///
-/// `record` (vs `class`): a reference type that gets value-based equality for free,
-/// plus a compiler-generated immutable-ish constructor flow. Used here purely because
-/// `AbstractModMetadata` is declared as a record — we have to match its shape.
+/// SPT 4.1 changed this from an abstract record (`AbstractModMetadata`) to an interface
+/// (`IModMetadata`). Practically that means two things: the properties no longer use
+/// `override` (there's no base implementation to override — an interface only declares
+/// the shape), and `IsBundleMod` is gone. SPT now decides that for itself by looking for
+/// a bundles.json in the mod folder.
+///
+/// `record` (vs `class`): a reference type that gets value-based equality for free.
+/// Kept here because the metadata is a plain immutable data carrier.
 ///
 /// `init` accessors (vs `set`): the property can only be assigned during object
 /// initialization (constructor or object initializer). After that, it's read-only.
 /// This is how SPT enforces "metadata is fixed at load time."
 /// </summary>
-public record ModMetadata : AbstractModMetadata
+public record ModMetadata : IModMetadata
 {
-    public override string ModGuid { get; init; } = "com.corter.modsync";
-    public override string Name { get; init; } = "Corter-ModSync";
-    public override string Author { get; init; } = "Corter";
-    public override List<string>? Contributors { get; init; } = ["Dildz (SPT 4.0 port)"];
-    public override Version Version { get; init; } = new("0.12.6");
+    public string ModGuid { get; init; } = "com.corter.modsync";
+    public string Name { get; init; } = "Corter-ModSync";
+    public string Author { get; init; } = "Corter";
+    public List<string>? Contributors { get; init; } = ["Dildz (SPT 4.x port)"];
+    public Version Version { get; init; } = new("0.12.6");
 
-    // Semver range — "~4.0.0" means ">=4.0.0 <4.1.0" (compatible with SPT 4.0.x).
-    public override Range SptVersion { get; init; } = new("~4.0.0");
+    // Semver range — "~4.1.0" means ">=4.1.0 <4.2.0" (compatible with SPT 4.1.x).
+    public Range SptVersion { get; init; } = new("~4.1.0");
 
-    public override List<string>? Incompatibilities { get; init; }
-    public override Dictionary<string, Range>? ModDependencies { get; init; }
-    public override string? Url { get; init; } = "https://github.com/Dildz/ModSync-for-SPT4.0";
-    public override bool? IsBundleMod { get; init; } = false;
-    public override string License { get; init; } = "WTFPL";
+    // New in 4.1. Set true only if the mod ships enum prepatch definitions in
+    // user/patchers/{ModGuid}. Our BepInEx prepatcher is a client-side thing and
+    // has nothing to do with this, so it stays false.
+    public bool HasPrepatcher { get; init; } = false;
+
+    public List<string>? Incompatibilities { get; init; }
+    public Dictionary<string, Range>? ModDependencies { get; init; }
+    public string? Url { get; init; } = "https://github.com/Dildz/ModSync-for-SPT4.0";
+    public string License { get; init; } = "WTFPL";
 }
 
 /// <summary>
 /// Main entry point. SPT discovers this class via the [Injectable] attribute, instantiates
 /// it through DI (the constructor's dependencies are resolved automatically), and calls
-/// PreSptLoadAsync() during startup.
+/// OnLoadAsync() during startup.
 ///
-/// `IPreSptLoadModAsync` runs BEFORE SPT itself finishes loading — important for us
-/// because we register an HTTP listener and want to be ready before clients can connect.
-/// Equivalent of corter's TS `IPreSptLoadMod` hook.
-///
-/// `TypePriority = OnLoadOrder.PreSptModLoader + 1` orders us just after the SPT mod loader
-/// has finished registering all mods. Matches the load timing of the original TS server.
+/// SPT 4.1 deleted the dedicated `IPreSptLoadModAsync` interface, so we use the general
+/// `IOnLoad` hook instead. The pre-SPT-load timing is now expressed purely through load
+/// order: SPT runs every `IOnLoad` whose TypePriority sits below `OnLoadOrder.GameCallbacks`
+/// in an early pass, before the rest of startup. `Preload + 1` puts us in that pass — the
+/// same slot the old `PreSptModLoader + 1` occupied (both are the value 100000), so the
+/// timing is unchanged. That matters here because we register an HTTP listener and want to
+/// be ready before clients can connect.
 ///
 /// Primary constructor syntax — `ModSyncMod(...)` declares the constructor parameters
 /// inline with the class definition. The parameters are implicitly stored as private
@@ -61,20 +70,23 @@ public record ModMetadata : AbstractModMetadata
 /// checks, then call <c>listener.Initialize(config)</c> to activate it. Until that
 /// call, the listener's <c>CanHandle</c> returns false and it's invisible to clients.
 /// </summary>
-[Injectable(TypePriority = OnLoadOrder.PreSptModLoader + 1)]
+[Injectable(TypePriority = OnLoadOrder.Preload + 1)]
 public class ModSyncMod(
     ISptLogger<ModSyncMod> logger,
     ConfigUtil configUtil,
-    ModSyncHttpListener listener) : IPreSptLoadModAsync
+    ModSyncHttpListener listener) : IOnLoad
 {
     // The two built-in files the mod author must ship in the mod folder alongside
-    // the server DLL. Paths are relative to the server's working directory; in
-    // SPT 4 the server runs from <gameRoot>/SPT/, so the updater + plugin live
-    // one directory up. Match the built-in syncpaths declared in ConfigUtil.
+    // the server DLL. Paths are relative to the server's working directory; the server
+    // runs from a subfolder of the game root (SPT/ on 4.0, renamed to SPT_Runtime/ on
+    // 4.1), so the updater + plugin live one directory up either way and these relative
+    // paths are unaffected by the rename. Match the built-in syncpaths declared in ConfigUtil.
     private const string UpdaterPath = "../ModSync.Updater.exe";
     private const string PluginPath = "../BepInEx/plugins/Corter-ModSync/Corter-ModSync.dll";
 
-    public async Task PreSptLoadAsync()
+    // The CancellationToken is signalled when the server shuts down (CTRL+C). We pass it
+    // to anything that accepts one so a shutdown mid-startup doesn't leave work running.
+    public async Task OnLoadAsync(CancellationToken cancellationToken)
     {
         Config config;
 

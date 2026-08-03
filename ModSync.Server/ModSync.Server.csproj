@@ -11,7 +11,7 @@
     official server-mod-examples use this SDK for the same reason.
   -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <OutputType>Library</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -40,15 +40,15 @@
                                    (SPT loads its own copies at runtime; copying would conflict)
   -->
   <ItemGroup>
-    <PackageReference Include="SPTarkov.Common" Version="4.0.13">
+    <PackageReference Include="SPTarkov.Common" Version="4.1.1">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="SPTarkov.DI" Version="4.0.13">
+    <PackageReference Include="SPTarkov.DI" Version="4.1.1">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="SPTarkov.Server.Core" Version="4.0.13">
+    <PackageReference Include="SPTarkov.Server.Core" Version="4.1.1">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>

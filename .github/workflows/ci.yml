@@ -19,10 +19,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v4
+      # SPT 4.1 targets .NET 10, so ModSync.Server + ModSync.Server.Tests are net10.0.
+      # ModSync.Tests / Updater / HashTester are still net9.0, and running a net9 test needs
+      # the net9 runtime, which the .NET 10 SDK does not include — so install both.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: |
+            9.0.x
+            10.0.x
 
       - name: Restore dependencies
         run: dotnet restore

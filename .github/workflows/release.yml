@@ -28,10 +28,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v4
+      # Both runtimes: the server projects are net10.0 (SPT 4.1), the rest are still net9.0.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: |
+            9.0.x
+            10.0.x
 
       - name: Restore dependencies
         # Reads nuget.config (which includes the BepInEx feed) and fetches every

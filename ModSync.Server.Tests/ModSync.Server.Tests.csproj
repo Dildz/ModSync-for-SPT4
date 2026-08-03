@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
 
@@ -21,9 +21,9 @@
           uses ExcludeAssets="runtime" because SPT loads its own copies at startup), here
           we actually need the DLLs present in the test output directory.
         -->
-        <PackageReference Include="SPTarkov.Common" Version="4.0.13"/>
-        <PackageReference Include="SPTarkov.DI" Version="4.0.13"/>
-        <PackageReference Include="SPTarkov.Server.Core" Version="4.0.13"/>
+        <PackageReference Include="SPTarkov.Common" Version="4.1.1"/>
+        <PackageReference Include="SPTarkov.DI" Version="4.1.1"/>
+        <PackageReference Include="SPTarkov.Server.Core" Version="4.1.1"/>
     </ItemGroup>
 
     <ItemGroup>

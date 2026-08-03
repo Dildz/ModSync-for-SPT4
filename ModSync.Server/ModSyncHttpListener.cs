@@ -2,10 +2,10 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using ModSync.Utility;
+using Spectre.Console;
+using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.Models.Common;
-using SPTarkov.Server.Core.Models.Logging;
-using SPTarkov.Server.Core.Models.Utils;
 using SPTarkov.Server.Core.DI;
 using SPTarkov.Server.Core.Servers.Http;
 using SPTarkov.Server.Core.Utils;
@@ -28,13 +28,13 @@ namespace ModSync.Server;
 /// How SPT 4 wires this up: anything implementing <see cref="IHttpListener"/> with
 /// <c>[Injectable]</c> is collected by the DI container at startup. When a request
 /// arrives, SPT iterates registered listeners and calls <see cref="CanHandle"/> on
-/// each; the first one that says yes gets <see cref="Handle"/> invoked. SPT's own
+/// each; the first one that says yes gets <see cref="HandleAsync"/> invoked. SPT's own
 /// <c>SptHttpListener</c> only matches routes registered on its internal router,
 /// so our <c>/modsync/</c> prefix is safe — there's no conflict.
 ///
 /// **Initialize() setter pattern.** This listener is constructed by DI during the
 /// container build, but the <see cref="Config"/> it needs comes from disk and is
-/// only available once <see cref="ModSyncMod"/>.PreSptLoadAsync runs. So we expose
+/// only available once <see cref="ModSyncMod"/>.OnLoadAsync runs. So we expose
 /// an <c>Initialize</c> method that ModSyncMod calls after loading config. Until
 /// then, <c>CanHandle</c> returns false and the listener is invisible to clients.
 ///
@@ -46,7 +46,7 @@ namespace ModSync.Server;
 /// its `_config` still null → `CanHandle` returns false → SPT logs `[UNHANDLED]`
 /// and serves 404. Singleton makes both resolutions return the same instance.
 /// </summary>
-[Injectable(InjectionType = InjectionType.Singleton, TypePriority = OnLoadOrder.PreSptModLoader + 1)]
+[Injectable(InjectionType = InjectionType.Singleton, TypePriority = OnLoadOrder.Preload + 1)]
 public class ModSyncHttpListener(
     ISptLogger<ModSyncHttpListener> logger,
     ISptLogger<SyncUtil> syncUtilLogger,
@@ -90,7 +90,9 @@ public class ModSyncHttpListener(
     /// First gate SPT calls. Return true only when we're ready (config loaded)
     /// AND the request looks like one of ours.
     /// </summary>
-    public bool CanHandle(MongoId sessionId, HttpContext context)
+    // SPT 4.1 dropped the sessionId parameter from CanHandle — the decision is made purely
+    // on the request itself. We never used it here anyway (we only look at method + path).
+    public bool CanHandle(HttpContext context)
     {
         if (_config is null) return false;
         var path = context.Request.Path.Value;
@@ -104,7 +106,9 @@ public class ModSyncHttpListener(
     /// complete the response normally or throw <see cref="HttpError"/> to signal
     /// a specific status code (e.g. 404 for a missing file).
     /// </summary>
-    public async Task Handle(MongoId sessionId, HttpContext context)
+    // Renamed from Handle in SPT 4.1, and it now receives a CancellationToken that is
+    // signalled if the client drops the request or the server shuts down.
+    public async Task HandleAsync(MongoId sessionId, HttpContext context, CancellationToken cancellationToken = default)
     {
         var path = context.Request.Path.Value!;
 
@@ -171,7 +175,7 @@ public class ModSyncHttpListener(
             logger.LogWithColor(
                 $"Corter-ModSync: client reports version '{clientVersion ?? "unknown"}' (server is {_modVersion}) "
                 + "— serving ModSync's own components only until it updates.",
-                LogTextColor.Gray);
+                Color.Grey);
 
         await WriteJsonAsync(context, 200, BuildPathsResponse(_config!.SyncPaths, isHeadless, versionMatches));
     }
