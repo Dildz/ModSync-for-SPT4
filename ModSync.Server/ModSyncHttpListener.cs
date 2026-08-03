@@ -121,7 +121,7 @@ public class ModSyncHttpListener(
                 "/modsync/exclusions" => HandleExclusionsAsync(context),
                 "/modsync/hashes" => HandleHashesAsync(context),
                 _ when path.StartsWith("/modsync/fetch/", StringComparison.Ordinal)
-                    => HandleFetchAsync(context, path["/modsync/fetch/".Length..]),
+                    => HandleFetchAsync(context, path["/modsync/fetch/".Length..], cancellationToken),
                 _ => throw new HttpError(404, "Corter-ModSync: Unknown route"),
             };
 
@@ -289,7 +289,7 @@ public class ModSyncHttpListener(
     /// <summary>
     /// GET /modsync/fetch/{file} → stream the requested file's bytes.
     /// </summary>
-    private async Task HandleFetchAsync(HttpContext context, string rawPath)
+    private async Task HandleFetchAsync(HttpContext context, string rawPath, CancellationToken cancellationToken)
     {
         var wirePath = Uri.UnescapeDataString(rawPath);
 
@@ -304,7 +304,10 @@ public class ModSyncHttpListener(
             throw new HttpError(404, $"Corter-ModSync: file '{filePath}' not found on server.");
         }
 
-        await httpFileUtil.SendFile(context.Response, sanitizedPath);
+        // Renamed to SendFileAsync in SPT 4.1, and it now takes a CancellationToken.
+        // Passing the request's token means a client that disconnects mid-download
+        // stops the transfer instead of streaming the whole file into a dead socket.
+        await httpFileUtil.SendFileAsync(context.Response, sanitizedPath, cancellationToken);
     }
 
     // ─── Response helpers ──────────────────────────────────────────────────────
