@@ -151,47 +151,13 @@ public class Plugin : BaseUnityPlugin
         return Directory.Exists(full) && Directory.EnumerateFileSystemEntries(full).Any();
     }
     /// <summary>
-    /// True when this syncpath declares baseFiles but ModSync did NOT install them, which
-    /// makes removing the mod unsafe.
-    ///
-    /// baseFiles are base-game files a mod REPLACES (DynamicMaps swaps two Unity assemblies;
-    /// Tarkov DLSS 4.5 swaps nvngx_dlss.dll). ModSync backs the original up as
-    /// <c>.modsync-bak</c> when IT installs one, so those backups are the only proof of
-    /// ownership. Without them there's no original to restore, and removing the mod's own
-    /// files while its replaced base files stay behind leaves the client in a mismatched
-    /// state — for DynamicMaps that means an infinite load, unrecoverable short of
-    /// reinstalling SPT. So: no backups, hands off the whole mod.
-    ///
-    /// EVERY declared baseFile must have a backup. A partial state (one file already matched
-    /// what the server served, so it was never staged or backed up) would otherwise restore
-    /// one file and delete another — exactly the mismatch we're preventing.
-    /// </summary>
-    private static bool IsUnsafeToRemove(SyncPath syncPath)
-    {
-        if (syncPath.baseFiles.Count == 0)
-            return false;
-
-        // Only a mod that's actually PRESENT can be unsafe to remove. Without this check a
-        // player who has never installed the mod would also fail the backup test (no mod, so
-        // no backups) and the entry would lock itself as un-tickable — they could never opt IN.
-        if (!IsInstalledLocally(syncPath.path))
-            return false;
-
-        return !syncPath.baseFiles.All(file =>
-            File.Exists(Path.Combine(Directory.GetCurrentDirectory(), file.Replace('/', Path.DirectorySeparatorChar)) + ".modsync-bak"));
-    }
-
-    /// <summary>
     /// An "optional" path is one the player genuinely chooses: opt-in (<c>enabled:false</c>)
     /// and not enforced by the server. Only these get a working F12 checkbox — everything
     /// else is shown for transparency but drawn as text (see <see cref="InfoOnlyDrawer"/>).
     /// </summary>
     private static bool IsOptional(SyncPath syncPath) =>
         !syncPath.enabled
-        && !syncPath.enforced
-        // A DM install ModSync doesn't own can't be removed safely, so don't offer a switch
-        // that would silently do nothing when flipped — show the reason instead.
-        && !IsUnsafeToRemove(syncPath);
+        && !syncPath.enforced;
 
     /// <summary>
     /// Which syncpaths appear in the F12 menu at all. Three kinds earn a place:
@@ -207,9 +173,7 @@ public class Plugin : BaseUnityPlugin
     private static bool IsVisibleInMenu(SyncPath syncPath) =>
         IsOptional(syncPath)
         || syncPath.enforced
-        || Builtins.IsBuiltinWirePath(syncPath.path)
-        // A locked mod must still show — the explainer is the whole point of it being there.
-        || IsUnsafeToRemove(syncPath);
+        || Builtins.IsBuiltinWirePath(syncPath.path);
 
     /// <summary>
     /// Draws a visible-but-not-selectable path as a short explainer instead of a checkbox, so
@@ -221,13 +185,9 @@ public class Plugin : BaseUnityPlugin
     /// </summary>
     private static Action<ConfigEntryBase> InfoOnlyDrawer(SyncPath syncPath)
     {
-        string text;
-        if (IsUnsafeToRemove(syncPath))
-            text = "Wasn't installed by ModSync and can't be removed safely — see the wiki for more info.";
-        else if (syncPath.enforced)
-            text = "Enforced by the server — always installed.";
-        else
-            text = "Installed by default — opt out via ModSync_Data/Exclusions.jsonc.";
+        var text = syncPath.enforced
+            ? "Enforced by the server — always installed."
+            : "Installed by default — opt out via ModSync_Data/Exclusions.jsonc.";
 
         return _ => GUILayout.Label(text, GUILayout.ExpandWidth(true));
     }
@@ -266,10 +226,7 @@ public class Plugin : BaseUnityPlugin
             : syncPaths.Where(syncPath =>
                 !syncPath.enforced
                 && !configSyncPathToggles[syncPath.path].Value
-                && previousSync.ContainsKey(syncPath.path)
-                // DM with no .modsync-bak pair: refuse the removal outright rather than half-do
-                // it. Excluded from BOTH sets, so ModSync simply leaves every DM file alone.
-                && !IsUnsafeToRemove(syncPath)).ToList();
+                && previousSync.ContainsKey(syncPath.path)).ToList();
 
     /// <summary>
     /// The full set the diff/compare + apply operate on: everything to keep in sync

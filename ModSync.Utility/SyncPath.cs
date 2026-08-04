@@ -36,15 +36,16 @@ public class SyncPath(
     public readonly bool headless = headless;
 
     /// <summary>
-    /// Files OUTSIDE this path that the mod replaces in the base game — e.g. DynamicMaps
-    /// swapping two Unity assemblies, or Tarkov DLSS 4.5 swapping nvngx_dlss.dll. Declaring
-    /// them here binds them to this syncpath's opt-in state, so they're served only when the
-    /// mod is active and are never pushed to a player who didn't ask for the mod.
+    /// Files this mod owns that live OUTSIDE its own folder — e.g. the two Unity assemblies
+    /// DynamicMaps drops into EscapeFromTarkov_Data/Managed, or the nvngx_dlss.dll that Tarkov
+    /// DLSS 4.5 swaps in. Declaring them here binds them to this syncpath's opt-in state, so
+    /// they're served only when the mod is active and are never pushed to a player who didn't
+    /// ask for the mod.
     ///
-    /// The original is backed up as &lt;file&gt;.modsync-bak on install and restored on removal.
-    /// Because those backups are the ONLY proof ModSync installed the mod, a syncpath whose
-    /// baseFiles are missing their backups is refused removal outright — deleting a base-game
-    /// file we never replaced would brick the client.
+    /// A baseFile may either REPLACE a base-game file or simply ADD one the game doesn't ship
+    /// (DynamicMaps' assemblies are additions — EFT has neither). Only a replacement leaves a
+    /// &lt;file&gt;.modsync-bak behind, and removal keys off exactly that: a backup means restore
+    /// the original, no backup means the mod added the file, so delete it like any other.
     /// </summary>
     public readonly List<string> baseFiles = baseFiles ?? [];
 }

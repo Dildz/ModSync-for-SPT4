@@ -62,11 +62,13 @@ public static class Patcher
     }
 
     /// <summary>
-    /// Folders holding BASE-GAME files that mods replace rather than add to. Files here get
-    /// backed up to .modsync-bak before being overwritten, and restored (never deleted) on
-    /// removal — losing one of these bricks the client.
-    ///   • Managed/          — Unity assemblies (DynamicMaps replaces two of them)
+    /// Folders where a mod may OVERWRITE a base-game file. An existing file here is copied to
+    /// .modsync-bak before being overwritten, so removal can put the original back.
+    ///   • Managed/          — Unity assemblies
     ///   • Plugins/x86_64/   — native Unity plugins (Tarkov DLSS 4.5 replaces nvngx_dlss.dll)
+    ///
+    /// A mod that ADDS a file here rather than replacing one gets no backup, and is removed
+    /// like any other synced file — DynamicMaps ships two Unity assemblies EFT does not have.
     /// </summary>
     private static bool IsInProtectedBaseFolder(string relPath)
     {
@@ -204,17 +206,12 @@ public static class Patcher
                 if (!File.Exists(fullPath))
                     continue;
 
+                // A .modsync-bak exists only where we overwrote a base-game file at install
+                // time, so it means "put the original back". Everything else is a file the mod
+                // ADDED and is removed like any other synced file.
                 var bakPath = fullPath + ".modsync-bak";
-                if (IsInProtectedBaseFolder(rel))
+                if (File.Exists(bakPath))
                 {
-                    // No backup means ModSync never installed this file, so it is a base-game
-                    // assembly — deleting it would brick the install. Leave it alone.
-                    if (!File.Exists(bakPath))
-                    {
-                        Info($"Skipping delete of base-game file with no backup (leaving in place): {rel}");
-                        continue;
-                    }
-
                     CopyReplacingLocked(bakPath, fullPath);
                     File.Delete(bakPath);
                     Info($"Restored {rel}");
