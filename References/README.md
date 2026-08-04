@@ -35,9 +35,11 @@ A **major** version bump does require it — SPT 4.1 changed all four `spt-*.dll
 |---|---|---|
 | `spt-common.dll`, `spt-core.dll`, `spt-custom.dll`, `spt-reflection.dll` | ✅ yes | SPT **4.1.1** release archive, `BepInEx/plugins/spt/` |
 | `Assembly-CSharp.dll` | ✅ yes | `Fika-Plugin` `References/hollowed.dll`, 4.1-era |
-| `Comfort*.dll`, `bsg.console.core.dll`, `Sirenix.Serialization.dll`, `Newtonsoft.Json.dll`, `Unity*.dll` | ⚠️ still 4.0-era | pending a 4.1 game install |
+| `Comfort*.dll`, `bsg.console.core.dll`, `Sirenix.Serialization.dll`, `Newtonsoft.Json.dll`, `Unity*.dll` | ✅ yes | a real **4.1.1** game install, `EscapeFromTarkov_Data/Managed/` |
 
-The Unity/BSG/Newtonsoft set tracks the **game build**, not the SPT version, so it usually survives an SPT bump untouched. They're only worth re-copying if the build starts failing on one of them.
+The Unity/BSG/Newtonsoft set tracks the **game build**, not the SPT version, so it usually survives an SPT bump untouched — and 4.0.13 → 4.1.1 bears that out almost exactly. Comparing the two installs' `Managed` folders (EFT builds **40087** and **40743**): the file inventory is identical, 169 files in both, and only **two** files differ in size at all — `Assembly-CSharp.dll` and `FilesChecker.dll`.
+
+Of the DLLs vendored here, the eight `Unity*` ones were already **byte-identical** and needed no copy. The five BSG/Newtonsoft ones changed hash while keeping their exact size, differing by a near-constant ~518-521 bytes each regardless of file size — the signature of a plain rebuild (MVID, PE timestamp, debug directory), not an API change. So this refresh is provenance hygiene; it is not expected to alter a single byte of compiled output, which is consistent with the solution having built green against the 4.0-era copies all along.
 
 A note on `Assembly-CSharp.dll`: this is Fika-Plugin's hollowed copy, and it is confirmed 4.1-era on two independent counts. Fika release **v2.4.0** (2026-08-03) states "Compatible with EFT 0.16.9.**40743** — Updated to SPT 4.1.X", and 40743 is exactly the EFT build in SPT's own `SPT-4.1.1-40743-e18bd1e` release. The binary agrees: the old copy carried 3,309 `GClass*` and 406 `GStruct*` symbols, the new one has 3 and 0, and it contains deobfuscated names such as `ABotProfileCreator` straight out of SPT's 4.0→4.1 rename table.
 
