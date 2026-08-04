@@ -125,31 +125,40 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-pre') || contains(github.ref_name, '-rc') }}
           # Auto-generate changelog from PR/commit history between this tag and the previous one.
           generate_release_notes: true
+          # Release title. Without this the release is titled with the bare tag, which says
+          # nothing about which SPT it targets — and both version lines (SPT4.0.x / SPT4.1.x)
+          # publish into this one `v*` tag namespace, so the tag alone is genuinely ambiguous.
+          name: "Corter ModSync ${{ github.ref_name }} (SPT 4.1.x)"
           # !!! UPDATE THE BODY BELOW BEFORE TAGGING A NEW RELEASE !!!
           # This text is baked into every release page verbatim — a stale body means the
           # release ships with the PREVIOUS version's changelog (happened on v0.12.4).
           body: |
+            ## Requires SPT 4.1.x
+
+            Built against **SPT 4.1.1**. It will not load on SPT 4.0.x — the 4.1 server checks which `SPTarkov.Server.Core` a mod was compiled against and refuses to load it on a mismatch.
+
+            **Still on SPT 4.0.x?** Stay on [v0.12.6](https://github.com/Dildz/ModSync-for-SPT4.0/releases/tag/v0.12.6). That line is still supported on the `SPT4.0.x` branch — both versions get fixes.
+
             ## Changes
 
-            - **New: `baseFiles` — sync mods that replace base-game files.** A syncPath can now list base-game files the mod overwrites (e.g. DLSS's `nvngx_dlss.dll`, DynamicMaps' Unity assemblies). ModSync backs the original up as `.modsync-bak` before replacing it and restores it when the mod is removed, so opting out puts the game back exactly as it was. This replaces the hardcoded DynamicMaps handling with a general mechanism any mod can use.
-            - **New: `headless` per syncPath** — set `"headless": false` and that path is never offered to a headless client. Useful for anything graphical (DLSS, map overlays), which a headless renders nothing for and simply wastes disk and bandwidth on.
-            - **New: ModSync updates itself first, then restarts.** When the client's version doesn't match the server's, the server serves only ModSync's own components until the client is current. This removes a class of failures where an out-of-date client tried to interpret a newer server's response.
-            - **New: `config_default.jsonc`** — the server writes the current shipped defaults alongside your config on every boot, so you can diff new options in without your own file ever being touched.
-            - **New: notification for missing config options** — if a release adds a top-level option your config lacks, the server logs it once at startup. It never rewrites your file.
-            - **Rework: the F12 menu.** Optional mods get a real checkbox that installs and uninstalls them. Enforced and built-in paths are now *shown* rather than hidden — as a one-line explanation with no control, so you can see what the server manages without being able to break it. The three catch-all paths are hidden entirely.
-            - **The zip no longer ships `config.jsonc`.** The server writes it on first boot if missing, so extracting over an existing install can no longer clobber your config.
+            - **SPT 4.1 support.** The server mod is ported to the 4.1 API: `IPreSptLoadModAsync` was removed (it's `IOnLoad` + `OnLoadAsync` now), `IHttpListener` changed shape, and log colours moved from `LogTextColor` to Spectre. No config changes are needed — your `config.jsonc` carries over as-is.
+            - **The server mod now installs to `SPT_Runtime/user/mods/`.** SPT 4.1 renamed its server folder from `SPT/` to `SPT_Runtime/`, and the zip follows. Extract into your game root exactly as before. Client-side paths (`BepInEx/`, the Updater at the game root) are unchanged.
+            - **Everything targets .NET 10 now, including `ModSync.Updater.exe`.** SPT 4.1 runs on .NET 10, and .NET doesn't roll forward across major versions — a .NET 9 Updater would simply refuse to start on a clean 4.1 install.
+            - **Fix: mods that ADD files outside their own folder are now uninstalled properly.** `baseFiles` assumed a mod always *replaces* a base-game file, so it treated "no `.modsync-bak`" as proof the file belonged to the game and refused to delete it. Mods that add a file instead of replacing one — DynamicMaps ships two Unity assemblies EFT doesn't have — left those files behind when removed, and their F12 entry locked itself so it couldn't be re-ticked either. Removal now keys off the backup alone: a `.modsync-bak` means restore the original, no backup means the mod added the file, so it's removed like anything else. Mods that genuinely replace a file (Tarkov DLSS's `nvngx_dlss.dll`) are unaffected — they still get a backup and still restore on opt-out.
 
             ## Upgrade notes
 
-            Unzip into your game root as usual — clients update via sync, no manual steps.
+            Unzip into your game root as usual — clients update themselves via sync, no manual steps.
 
-            Your existing `config.jsonc` is untouched: `baseFiles` and `headless` are optional and default to the previous behaviour. To use them, copy the examples from the regenerated `config_default.jsonc`.
+            Your `config.jsonc` is untouched and needs no changes for 4.1.
 
-            Upgrading leaves one dead entry, `(Builtin) Managed Files`, in each client's `BepInEx/config/corter.modsync.cfg`. It is unbound and does nothing; delete the line if it bothers you.
+            If you ran 0.12.6 with a `baseFiles` entry for a mod that *adds* files (DynamicMaps), those files were left behind when the mod was removed. They're inert on their own, and 0.13.0 cleans them up the next time that mod is un-ticked.
+
+            ## Testing status
+
+            This is a **pre-release**. The 4.1 build passes CI — it compiles and both test suites are green — but it has not yet been run against a live 4.1 server or client. Please don't put it on a server you care about without trying it somewhere else first.
 
             ## Docs
 
-            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/Configuration#mods-that-replace-base-game-files) — how `baseFiles` backs up and restores originals, and why a hand-installed mod gets locked
+            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/Configuration#mods-that-replace-base-game-files) — how `baseFiles` backs up and restores originals. Note the wiki documents the 4.0.x line; the removal behaviour described above is 4.1-only for now.
             - [Usage Examples](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/UsageExamples) — worked `config.jsonc` setups, from minimal to a real server
-
-            **Coming from before v0.12.4?** See the v0.12.4 notes for the one-time `BepInEx/patchers/Corter-ModSync/` folder cleanup on the server/headless.
