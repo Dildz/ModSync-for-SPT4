@@ -44,7 +44,7 @@ public record ModMetadata : IModMetadata
 
     public List<string>? Incompatibilities { get; init; }
     public Dictionary<string, Range>? ModDependencies { get; init; }
-    public string? Url { get; init; } = "https://github.com/Dildz/ModSync-for-SPT4.0";
+    public string? Url { get; init; } = "https://github.com/Dildz/ModSync-for-SPT4";
     public string License { get; init; } = "WTFPL";
 }
 

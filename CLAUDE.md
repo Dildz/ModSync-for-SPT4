@@ -4,7 +4,7 @@ Project-level instructions for Claude Code. Loaded automatically in every sessio
 
 ## What this is
 
-Fork of [c-orter/ModSync](https://github.com/c-orter/ModSync) being ported from SPT 3.11 to **SPT 4.0.x**. Fork lives at [Dildz/ModSync-for-SPT4.0](https://github.com/Dildz/ModSync-for-SPT4.0).
+Fork of [c-orter/ModSync](https://github.com/c-orter/ModSync) being ported from SPT 3.11 to **SPT 4.0.x**. Fork lives at [Dildz/ModSync-for-SPT4](https://github.com/Dildz/ModSync-for-SPT4).
 
 Upstream's last release (`v0.11.1`, Mar 2025) targets SPT 3.11. No upstream SPT 4 work exists. License is WTFPL — keep Corter attribution but otherwise unrestricted.
 

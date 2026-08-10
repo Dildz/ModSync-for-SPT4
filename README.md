@@ -47,7 +47,7 @@ This project allows clients to easily add/update/remove mods, keeping them in sy
 > The ModSync Updater requires the [.NET 9.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/9.0).
 > The SPT launcher bundles it — if you installed SPT manually, make sure it's installed.
 
-1. Download the latest version of the mod from the [GitHub Releases](https://github.com/Dildz/ModSync-for-SPT4.0/releases) page
+1. Download the latest version of the mod from the [GitHub Releases](https://github.com/Dildz/ModSync-for-SPT4/releases) page
 2. Extract into your **game root** (the folder containing `EscapeFromTarkov.exe`) — the zip contains both `BepInEx/` and `SPT/` directories that land in the right places automatically
 3. Start the server
 
@@ -58,13 +58,13 @@ This project allows clients to easily add/update/remove mods, keeping them in sy
 
 ## Configuration
 
-For information about modifying the ModSync config, see [the configuration page on the wiki](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/Configuration).
+For information about modifying the ModSync config, see [the configuration page on the wiki](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration).
 
 ## Frequently Asked Questions
 
-Checkout some [frequently asked questions](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/FAQ) on the wiki!
+Checkout some [frequently asked questions](https://github.com/Dildz/ModSync-for-SPT4/wiki/FAQ) on the wiki!
 
-## [How Sync Works](https://github.com/Dildz/ModSync-for-SPT4.0/wiki/How-Sync-Works)
+## [How Sync Works](https://github.com/Dildz/ModSync-for-SPT4/wiki/How-Sync-Works)
 
 If you are looking to understand how syncing works, take a look at the technical writeup on the wiki. It goes into detail on the different stages of the sync process
 and different modes of operation.
