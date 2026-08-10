@@ -135,7 +135,7 @@ jobs:
           body: |
             ## Requires SPT 4.1.x
 
-            Built against **SPT 4.1.1**. It will not load on SPT 4.0.x — the 4.1 server checks which `SPTarkov.Server.Core` a mod was compiled against and refuses to load it on a mismatch.
+            Built against **SPT 4.1.1** and declared as `~4.1.0`, so it loads on any 4.1.x — verified running on **4.1.2**. It will not load on SPT 4.0.x: the 4.1 server checks which `SPTarkov.Server.Core` a mod was compiled against and refuses to load it on a mismatch.
 
             **Still on SPT 4.0.x?** Stay on [v0.12.6](https://github.com/Dildz/ModSync-for-SPT4/releases/tag/v0.12.6). That line is still supported on the `SPT4.0.x` branch — both versions get fixes.
 
@@ -156,7 +156,11 @@ jobs:
 
             ## Testing status
 
-            This is a **pre-release**. The 4.1 build passes CI — it compiles and both test suites are green — but it has not yet been run against a live 4.1 server or client. Please don't put it on a server you care about without trying it somewhere else first.
+            Run on a live **SPT 4.1.2** server with both a Fika headless and a real player client, syncing several mods end to end. Both test suites are green in CI as well.
+
+            That includes **DynamicMaps**, which is the mod the `baseFiles` fix above was written for: the case where a mod adds files EFT doesn't ship rather than replacing existing ones. Install, sync and removal all behaved as expected.
+
+            Not every configuration can be covered by one server, so if you hit something, please open an issue.
 
             ## Docs
 
