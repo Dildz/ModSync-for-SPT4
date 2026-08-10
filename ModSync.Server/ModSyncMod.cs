@@ -35,7 +35,7 @@ public record ModMetadata : AbstractModMetadata
 
     public override List<string>? Incompatibilities { get; init; }
     public override Dictionary<string, Range>? ModDependencies { get; init; }
-    public override string? Url { get; init; } = "https://github.com/Dildz/ModSync-for-SPT4.0";
+    public override string? Url { get; init; } = "https://github.com/Dildz/ModSync-for-SPT4";
     public override bool? IsBundleMod { get; init; } = false;
     public override string License { get; init; } = "WTFPL";
 }

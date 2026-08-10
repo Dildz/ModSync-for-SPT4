@@ -132,7 +132,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         {
             // ┌─────────────────────────────────────────────────────────────────────┐
             // │  WIKI — FULL CONFIG GUIDE:                                          │
-            // │  https://github.com/Dildz/ModSync-for-SPT4.0/wiki/Configuration     │
+            // │  https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration       │
             // │  Every option below is documented there with examples.              │
             // └─────────────────────────────────────────────────────────────────────┘
 
