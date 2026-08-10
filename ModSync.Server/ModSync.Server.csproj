@@ -26,6 +26,15 @@
     <OutputPath>bin\$(Configuration)\$(ProjectName)\$(AssemblyName)\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 
+    <!--
+      Class libraries do NOT copy NuGet package assemblies to the output folder by default —
+      a normal app resolves them through deps.json at runtime, but a mod DLL is side-loaded by
+      SPT and gets no such resolution. Without this, Markdig.dll is simply absent from the mod
+      folder and the docs page throws FileNotFoundException the first time it renders.
+      The SPT packages are unaffected: ExcludeAssets="runtime" keeps them out regardless.
+    -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
     <!-- Don't ship debug symbols or per-build deps.json in mod releases. -->
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
@@ -52,6 +61,32 @@
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
+    <!--
+      Blazor web UI. Brings in MudBlazor and BaseMudBlazorLayout. Same exclusions as the
+      others: the server already has these loaded, so shipping our own copies would clash.
+    -->
+    <PackageReference Include="SPTarkov.Server.Web" Version="4.1.1">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
+    Markdig renders the documentation markdown at runtime. Unlike the SPT packages above this
+    one is NOT excluded: the server does not provide it, so Markdig.dll has to ship next to
+    ModSync.dll in the mod folder.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Markdig" Version="1.3.2" />
+  </ItemGroup>
+
+  <!--
+    Docs are embedded in the assembly rather than shipped as loose files, so they cannot be
+    half-deployed or edited into a broken state on a live server. They are authored as plain
+    markdown so the same sources can feed the GitHub wiki.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Docs\*.md" />
   </ItemGroup>
 
   <!--

@@ -1,0 +1,36 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using MudBlazor
+@namespace ModSync.Server.Web.Layouts
+@inherits SPTarkov.Server.Web.Layout.BaseMudBlazorLayout
+
+@*
+    Inheriting BaseMudBlazorLayout is what plugs this page into the SPT server's own web UI
+    rather than standing up a separate site. The stylesheet link below is required: MudBlazor's
+    CSS is served from the framework's static assets, not bundled with the mod.
+*@
+
+<HeadContent>
+    <link href="@Assets["_content/MudBlazor/MudBlazor.min.css"]" rel="stylesheet" />
+</HeadContent>
+
+<MudThemeProvider IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudText Typo="Typo.h6">ModSync</MudText>
+        <MudSpacer />
+        <MudLink Href="https://github.com/Dildz/ModSync-for-SPT4" Target="_blank" Color="Color.Inherit" Underline="Underline.None">
+            <MudText Typo="Typo.body2">GitHub</MudText>
+        </MudLink>
+    </MudAppBar>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-6 mb-6">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>

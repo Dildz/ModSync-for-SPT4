@@ -2,6 +2,9 @@ using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.DI;
 using SPTarkov.Server.Core.Models.Spt.Mod;
+// IModBlazorMetadata lives in the Web package, not Server.Core — implementing it is what
+// makes SPT serve this mod's Blazor pages.
+using SPTarkov.Server.Web;
 
 // Aliases — SemanticVersioning ships its own Version/Range types that shadow System.Version.
 // Aliasing here makes the ModMetadata properties below read cleanly.
@@ -26,7 +29,7 @@ namespace ModSync.Server;
 /// initialization (constructor or object initializer). After that, it's read-only.
 /// This is how SPT enforces "metadata is fixed at load time."
 /// </summary>
-public record ModMetadata : IModMetadata
+public record ModMetadata : IModMetadata, IModBlazorMetadata
 {
     public string ModGuid { get; init; } = "com.corter.modsync";
     public string Name { get; init; } = "Corter-ModSync";
@@ -46,6 +49,20 @@ public record ModMetadata : IModMetadata
     public Dictionary<string, Range>? ModDependencies { get; init; }
     public string? Url { get; init; } = "https://github.com/Dildz/ModSync-for-SPT4";
     public string License { get; init; } = "WTFPL";
+
+    // --- IModBlazorMetadata ---------------------------------------------------------------
+    // Implementing this interface is what tells the server to serve this mod's Blazor pages
+    // and register them for routing. It is a marker: no method to call, just be present.
+
+    // Null means static files are served under the assembly name. We ship no wwwroot yet.
+    public string? WWWRootUrl { get; init; }
+
+    // Puts a card on the server's landing page. Must match the @page route on Docs.razor or
+    // the card links nowhere.
+    public string? HomePage { get; init; } = "/modsync";
+
+    public string? HomePageDescription { get; init; } =
+        "Documentation and configuration reference for ModSync.";
 }
 
 /// <summary>

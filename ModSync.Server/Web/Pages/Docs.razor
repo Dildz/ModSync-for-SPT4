@@ -1,0 +1,82 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Routing
+@using MudBlazor
+@page "/modsync"
+@page "/modsync/{PageId}"
+@namespace ModSync.Server.Web.Pages
+@using ModSync.Server
+@layout ModSync.Server.Web.Layouts.MainLayout
+
+@*
+    Phase A: documentation only, no editing. The point is that the config reference lives
+    where people already are — inside the server they just installed — instead of on a wiki
+    they have to know exists to find.
+
+    Two @page routes: /modsync lands on the first doc, /modsync/{PageId} deep-links to one.
+*@
+
+<MudGrid>
+    <MudItem xs="12" md="3">
+        <MudPaper Class="pa-2" Elevation="1">
+            <MudNavMenu>
+                @* Loop variable is deliberately NOT called `page`: `@page.Title` gets parsed
+                   as a @page directive and fails the build with RZ1011. *@
+                @foreach (var doc in DocsService.All)
+                {
+                    <MudNavLink Href="@($"/modsync/{doc.Id}")"
+                                Match="NavLinkMatch.All"
+                                Icon="@Icons.Material.Filled.Article">
+                        @doc.Title
+                    </MudNavLink>
+                }
+            </MudNavMenu>
+        </MudPaper>
+
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-4">
+            Editing the config from here is not implemented yet. Changes still go in
+            <code>config.jsonc</code>, and the server needs a restart to pick them up.
+        </MudAlert>
+    </MudItem>
+
+    <MudItem xs="12" md="9">
+        <MudPaper Class="pa-6" Elevation="1">
+            @if (Current is null)
+            {
+                <MudText Typo="Typo.h6">Not found</MudText>
+                <MudText Typo="Typo.body2">There is no documentation page called "@PageId".</MudText>
+            }
+            else
+            {
+                @* The HTML comes from our own markdown, compiled into the assembly, so there
+                   is no user-supplied content to sanitise here. *@
+                <div class="modsync-docs">@((MarkupString)Current.Html)</div>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<style>
+    /* MudBlazor styles its own components, not raw HTML from markdown, so give the rendered
+       document readable defaults and stop wide tables and code blocks blowing out the page. */
+    .modsync-docs table { border-collapse: collapse; margin: 1rem 0; display: block; overflow-x: auto; }
+    .modsync-docs th, .modsync-docs td { border: 1px solid rgba(255,255,255,.15); padding: .4rem .6rem; }
+    .modsync-docs pre { background: rgba(0,0,0,.35); padding: .8rem; border-radius: 4px; overflow-x: auto; }
+    .modsync-docs code { background: rgba(0,0,0,.35); padding: .1rem .3rem; border-radius: 3px; }
+    .modsync-docs pre code { background: none; padding: 0; }
+    .modsync-docs blockquote { border-left: 3px solid rgba(255,255,255,.25); margin: 1rem 0; padding: .2rem 1rem; }
+    .modsync-docs img { max-width: 100%; }
+    .modsync-docs h1, .modsync-docs h2 { border-bottom: 1px solid rgba(255,255,255,.12); padding-bottom: .3rem; }
+</style>
+
+@code {
+    [Parameter]
+    public string? PageId { get; set; }
+
+    [Inject]
+    public DocsService DocsService { get; set; } = default!;
+
+    // Falls back to the first page so /modsync alone is a valid landing route.
+    private DocPage? Current =>
+        string.IsNullOrEmpty(PageId) ? DocsService.All.FirstOrDefault() : DocsService.Get(PageId);
+}
