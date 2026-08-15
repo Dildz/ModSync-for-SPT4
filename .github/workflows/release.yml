@@ -128,7 +128,7 @@ jobs:
 
             **On SPT 4.1.x?** Use [v0.13.0](https://github.com/Dildz/ModSync-for-SPT4/releases/tag/v0.13.0) instead. Both lines are maintained.
 
-            **Pre-release.** Two changes worth testing before this goes out as v0.12.7. Both are server-side config features; nothing changes unless you edit `config.jsonc`.
+            **Pre-release.** Three changes worth testing before this goes out as v0.12.7. The two config features do nothing until you edit `config.jsonc`; the third is a one-time tidy-up each client does to its own settings file.
 
             ## Changes
 
@@ -136,6 +136,8 @@ jobs:
               Do not put it on the three catch-alls (`../BepInEx/plugins`, `patchers`, `config`) - they carry the mods your players need to connect, so one untick would strip the modset.
             - **New: removing a mod from your config now removes it from clients.** Delete a mod's files from the server *and* delete its `syncPaths` entry, and every client uninstalls its copy on the next sync, with the usual prompt. Previously the entry disappearing meant clients never heard about it again and kept the mod permanently.
               ModSync records what it served in `.modsync-served.json` next to `config.jsonc`, and keeps offering a removed entry as empty until you re-add it or clear that file. Deleting the entry but **keeping** the files still does the opposite, by design: the entry is what carves a mod out of the catch-alls, so without it they sync it to everyone.
+            - **Fixed: renaming a syncPath no longer resets your players' F12 choices.** Each client stored its toggles under the syncPath's `name`, so relabelling an entry made every player's setting for that mod revert to default and left a dead line in their config. Toggles are now stored under the `path` and merely *displayed* using the name. Each client carries its existing choices over on the first launch and tidies the old lines away; nobody has to do anything.
+              This mattered more once `optional` existed: a reset re-ticks an opt-out path, which would have silently reinstalled a mod the player had refused.
 
             ## Upgrade notes
 

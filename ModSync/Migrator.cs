@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using BepInEx.Configuration;
 using ModSync.Utility;
 using Newtonsoft.Json.Linq;
 using SPT.Common.Utils;
@@ -10,6 +11,9 @@ namespace ModSync;
 
 public class Migrator(string baseDir)
 {
+    /// <summary>BepInEx config section the F12 syncpath toggles live in.</summary>
+    public const string ConfigSection = "Synced Paths";
+
     private string MODSYNC_DIR => Path.Combine(baseDir, "ModSync_Data");
     private string VERSION_PATH => Path.Combine(MODSYNC_DIR, "Version.txt");
     private string PREVIOUS_SYNC_PATH => Path.Combine(MODSYNC_DIR, "PreviousSync.json");
@@ -56,6 +60,101 @@ public class Migrator(string baseDir)
 
         Directory.CreateDirectory(MODSYNC_DIR);
         File.WriteAllText(VERSION_PATH, pluginVersion.ToString());
+    }
+
+    /// <summary>
+    /// Keys already present in a section of a BepInEx .cfg, read straight from the file text.
+    ///
+    /// Needed because BepInEx only exposes settings that have been BOUND, and at the point we
+    /// run nothing is bound yet - a value saved by a previous launch is still just a line in the
+    /// file. Binding to find out would be self-defeating: an absent key returns the default we
+    /// passed, which is indistinguishable from a saved value that happens to equal it.
+    ///
+    /// The format is plain `key = value` under a `[Section]` header, and keys are written
+    /// verbatim (paths and all), so a split on the first " = " is enough.
+    /// </summary>
+    public static HashSet<string> ReadSavedKeys(string cfgText, string section)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        var inSection = false;
+
+        foreach (var raw in cfgText.Split('\n'))
+        {
+            var line = raw.Trim();
+
+            if (line.StartsWith("[", StringComparison.Ordinal) && line.EndsWith("]", StringComparison.Ordinal))
+            {
+                inSection = line == $"[{section}]";
+                continue;
+            }
+
+            if (!inSection || line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
+                continue;
+
+            var split = line.IndexOf(" = ", StringComparison.Ordinal);
+            if (split > 0)
+                keys.Add(line.Substring(0, split));
+        }
+
+        return keys;
+    }
+
+    /// <summary>
+    /// Brings a player's saved F12 choices across when the key a toggle is stored under changes.
+    ///
+    /// Toggles used to be keyed by the syncpath's NAME, which is server config the admin can edit
+    /// at any time. Renaming an entry therefore silently reset everyone's choice for that mod, and
+    /// left the old line behind as an orphan. They are keyed by PATH now, which is the identity of
+    /// the thing being synced and doesn't change when a label does.
+    ///
+    /// This runs once per client, before anything is bound: for each syncpath with no saved value
+    /// under its path but one under its name, the value is carried across and the stale line is
+    /// removed. After that a rename is invisible to the player - which is the whole point, because
+    /// with `optional` a reset is no longer harmless: it would re-tick a mod the player had
+    /// deliberately opted out of, and reinstall it.
+    ///
+    /// Returns path -> carried value, for the caller to use as that toggle's bind default.
+    /// </summary>
+    public static Dictionary<string, bool> CarryToggleValues(
+        ConfigFile config,
+        List<SyncPath> syncPaths,
+        Action<string> report)
+    {
+        var carried = new Dictionary<string, bool>(StringComparer.Ordinal);
+
+        if (!File.Exists(config.ConfigFilePath))
+            return carried;
+
+        HashSet<string> saved;
+        try
+        {
+            saved = ReadSavedKeys(File.ReadAllText(config.ConfigFilePath), ConfigSection);
+        }
+        catch (Exception e)
+        {
+            // Cosmetic continuity, never worth failing a launch over: without it the player just
+            // gets the seeded defaults, which is exactly the old behaviour.
+            Plugin.Logger.LogWarning($"ModSync: could not read saved F12 settings ({e.Message}). Toggles will use their defaults.");
+            return carried;
+        }
+
+        foreach (var syncPath in syncPaths)
+        {
+            var pathKey = syncPath.path.Replace("\\", "/");
+            var nameKey = syncPath.name.Replace("\\", "/");
+
+            if (pathKey == nameKey || saved.Contains(pathKey) || !saved.Contains(nameKey))
+                continue;
+
+            var old = new ConfigDefinition(ConfigSection, nameKey);
+            var oldEntry = config.Bind(old, false);
+            carried[syncPath.path] = oldEntry.Value;
+            config.Remove(old);
+
+            report($"ModSync: '{nameKey}' is now stored as '{pathKey}' - your setting ({oldEntry.Value}) was kept.");
+        }
+
+        return carried;
     }
 
     public void TryMigrate(Version pluginVersion, List<SyncPath> syncPaths)

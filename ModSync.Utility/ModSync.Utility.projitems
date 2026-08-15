@@ -18,6 +18,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)LongPath.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetroHash.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ModFile.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ModSyncLog.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SyncPath.cs" />
   </ItemGroup>
 </Project>
