@@ -45,10 +45,10 @@ This project allows clients to easily add/update/remove mods, keeping them in sy
 ### Installation
 
 > The ModSync Updater requires the [.NET 9.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/9.0).
-> The SPT launcher bundles it — if you installed SPT manually, make sure it's installed.
+> The SPT launcher bundles it - if you installed SPT manually, make sure it's installed.
 
 1. Download the latest version of the mod from the [GitHub Releases](https://github.com/Dildz/ModSync-for-SPT4/releases) page
-2. Extract into your **game root** (the folder containing `EscapeFromTarkov.exe`) — the zip contains both `BepInEx/` and `SPT/` directories that land in the right places automatically
+2. Extract into your **game root** (the folder containing `EscapeFromTarkov.exe`) - the zip contains both `BepInEx/` and `SPT/` directories that land in the right places automatically
 3. Start the server
 
 > [!NOTE]
@@ -77,11 +77,11 @@ and different modes of operation.
 - [x] Custom folder sync support (BepInEx/plugins, BepInEx/patchers, BepInEx/config, and custom paths)
 - [x] Maybe cooler progress bar/custom UI (low priority)
 - [x] External updater to prevent file-in-use issues on Windows
-- [x] Headless client support — `headlessIncludes` allowlist serves only the plugins a headless instance needs
-- [x] BepInEx preloader patcher — applies staged updates on headless before any DLLs are locked, replacing the Updater for Docker/Linux
-- [x] `managedIncludes` — sync `EscapeFromTarkov_Data/Managed/` assemblies to players via filename allowlist
-- [x] `baseFiles` — sync mods that replace base-game files, backing the original up and restoring it on removal
-- [x] Per-syncPath `headless` gate — withhold graphics-only mods from headless clients entirely
+- [x] Headless client support - `headlessIncludes` allowlist serves only the plugins a headless instance needs
+- [x] BepInEx preloader patcher - applies staged updates on headless before any DLLs are locked, replacing the Updater for Docker/Linux
+- [x] `managedIncludes` - sync `EscapeFromTarkov_Data/Managed/` assemblies to players via filename allowlist
+- [x] `baseFiles` - sync mods that replace base-game files, backing the original up and restoring it on removal
+- [x] Per-syncPath `headless` gate - withhold graphics-only mods from headless clients entirely
 - [x] Real tests?!? (low priority)
 - [ ] Allow user to upload their local mods folders to host (needs some form of authorization)
 - [ ] Buttons to sync from the BepInEx config menu (F12)

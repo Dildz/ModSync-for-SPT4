@@ -33,7 +33,7 @@ public class IntegrationTests
         var previousSync = File.Exists(previousSyncPath) ? JsonConvert.DeserializeObject<SyncPathModFiles>(File.ReadAllText(previousSyncPath)) : [];
 
         // Read raw exclusion strings. Test fixtures still use ModSync_Data/Exclusions.json
-        // (no 'c') — production renames it to .jsonc on first run, but the in-place
+        // (no 'c') - production renames it to .jsonc on first run, but the in-place
         // legacy file is still readable. Either extension parses fine through Newtonsoft.
         var localExclusionsPath = Path.Combine(localPath, "ModSync_Data", "Exclusions.json");
         var localExclusionsRaw = File.Exists(localExclusionsPath)
@@ -44,7 +44,7 @@ public class IntegrationTests
 
         // Local walk and remote walk both see everything (only filter on remote-side
         // exclusions like .nosync). Player-side localExclusions are applied AFTER the
-        // walk, only to the remote file list — mirroring production behavior at
+        // walk, only to the remote file list - mirroring production behavior at
         // Plugin.cs's `remotePathHashes` filter step.
         var remoteModFiles = Sync.HashLocalFiles(remotePath, syncPaths, remoteExclusions).Result;
         var localModFiles = Sync.HashLocalFiles(localPath, syncPaths, remoteExclusions).Result;

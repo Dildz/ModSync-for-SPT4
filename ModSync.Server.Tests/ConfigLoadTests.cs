@@ -3,12 +3,12 @@ using ModSync.Utility;
 namespace ModSync.Server.Test;
 
 /// <summary>
-/// Tests for ConfigUtil.LoadAsync — config file creation, loading, built-in syncpath
+/// Tests for ConfigUtil.LoadAsync - config file creation, loading, built-in syncpath
 /// injection, object-form parsing, and validation.
 /// Ported from the original TypeScript config.test.ts "ConfigUtil" describe block.
 ///
 /// LoadAsync resolves config.jsonc from the directory containing the server assembly.
-/// In tests that directory is the test output bin — we write our test config there
+/// In tests that directory is the test output bin - we write our test config there
 /// and clean up in TearDown.
 /// </summary>
 [TestFixture]
@@ -296,5 +296,41 @@ public class ConfigLoadTests
         }");
 
         Assert.ThrowsAsync<InvalidOperationException>(() => MakeUtil().LoadAsync());
+    }
+
+    // ── optional ──────────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task OptionalDefaultsToFalse()
+    {
+        // Every config written before this option existed omits it, and the catch-alls must
+        // stay OUT of the F12 menu - unticking one would uninstall every mod under it.
+        File.WriteAllText(ConfigPath, @"{
+            ""syncPaths"": [""../BepInEx/plugins"", { ""path"": ""user/mods"" }],
+            ""exclusions"": []
+        }");
+
+        var config = await MakeUtil().LoadAsync();
+
+        Assert.That(config.SyncPaths.Where(sp => !sp.path.Contains("ModSync")), Has.All.Matches<SyncPath>(sp => !sp.optional));
+    }
+
+    [Test]
+    public async Task ParsesOptionalAlongsideEnabled()
+    {
+        // The combination that didn't exist before: synced by default AND player-refusable.
+        File.WriteAllText(ConfigPath, @"{
+            ""syncPaths"": [{ ""path"": ""user/mods"", ""name"": ""Server mods"", ""enabled"": true, ""optional"": true }],
+            ""exclusions"": []
+        }");
+
+        var config = await MakeUtil().LoadAsync();
+
+        var serverMods = config.SyncPaths.First(sp => sp.path == "user/mods");
+        Assert.Multiple(() =>
+        {
+            Assert.That(serverMods.optional, Is.True);
+            Assert.That(serverMods.enabled, Is.True, "optional decides IF there's a checkbox; enabled decides its starting state");
+        });
     }
 }

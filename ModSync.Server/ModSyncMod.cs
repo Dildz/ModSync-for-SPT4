@@ -4,7 +4,7 @@ using SPTarkov.Server.Core.Models.External;
 using SPTarkov.Server.Core.Models.Spt.Mod;
 using SPTarkov.Server.Core.Models.Utils;
 
-// Aliases — SemanticVersioning ships its own Version/Range types that shadow System.Version.
+// Aliases - SemanticVersioning ships its own Version/Range types that shadow System.Version.
 // Aliasing here makes the ModMetadata properties below read cleanly.
 using Range = SemanticVersioning.Range;
 using Version = SemanticVersioning.Version;
@@ -12,11 +12,11 @@ using Version = SemanticVersioning.Version;
 namespace ModSync.Server;
 
 /// <summary>
-/// Mod metadata — SPT 4 replaces the old package.json with a strongly-typed record.
+/// Mod metadata - SPT 4 replaces the old package.json with a strongly-typed record.
 ///
 /// `record` (vs `class`): a reference type that gets value-based equality for free,
 /// plus a compiler-generated immutable-ish constructor flow. Used here purely because
-/// `AbstractModMetadata` is declared as a record — we have to match its shape.
+/// `AbstractModMetadata` is declared as a record - we have to match its shape.
 ///
 /// `init` accessors (vs `set`): the property can only be assigned during object
 /// initialization (constructor or object initializer). After that, it's read-only.
@@ -30,7 +30,7 @@ public record ModMetadata : AbstractModMetadata
     public override List<string>? Contributors { get; init; } = ["Dildz (SPT 4.0 port)"];
     public override Version Version { get; init; } = new("0.12.6");
 
-    // Semver range — "~4.0.0" means ">=4.0.0 <4.1.0" (compatible with SPT 4.0.x).
+    // Semver range - "~4.0.0" means ">=4.0.0 <4.1.0" (compatible with SPT 4.0.x).
     public override Range SptVersion { get; init; } = new("~4.0.0");
 
     public override List<string>? Incompatibilities { get; init; }
@@ -45,14 +45,14 @@ public record ModMetadata : AbstractModMetadata
 /// it through DI (the constructor's dependencies are resolved automatically), and calls
 /// PreSptLoadAsync() during startup.
 ///
-/// `IPreSptLoadModAsync` runs BEFORE SPT itself finishes loading — important for us
+/// `IPreSptLoadModAsync` runs BEFORE SPT itself finishes loading - important for us
 /// because we register an HTTP listener and want to be ready before clients can connect.
 /// Equivalent of corter's TS `IPreSptLoadMod` hook.
 ///
 /// `TypePriority = OnLoadOrder.PreSptModLoader + 1` orders us just after the SPT mod loader
 /// has finished registering all mods. Matches the load timing of the original TS server.
 ///
-/// Primary constructor syntax — `ModSyncMod(...)` declares the constructor parameters
+/// Primary constructor syntax - `ModSyncMod(...)` declares the constructor parameters
 /// inline with the class definition. The parameters are implicitly stored as private
 /// fields you can reference from any method.
 ///
@@ -87,7 +87,7 @@ public class ModSyncMod(
             // Mirrors corter's "load failed → log + leave listener dormant" behaviour.
             // The listener stays uninitialized so CanHandle returns false and the
             // /modsync/ routes 404 cleanly rather than serving partial data.
-            logger.Error($"Corter-ModSync: failed to load config — server mod is disabled.\n{ex}");
+            logger.Error($"Corter-ModSync: failed to load config - server mod is disabled.\n{ex}");
             return;
         }
 
@@ -118,7 +118,7 @@ public class ModSyncMod(
         // Hand config + version to the listener. After this returns, it starts
         // accepting requests on /modsync/*. We pull the version from ModMetadata
         // so the wire response always matches the declared mod version (single
-        // source of truth — change it in one place).
+        // source of truth - change it in one place).
         var modVersion = new ModMetadata().Version.ToString();
         listener.Initialize(config, modVersion);
 

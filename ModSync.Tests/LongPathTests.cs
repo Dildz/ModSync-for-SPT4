@@ -7,7 +7,7 @@ public class LongPathTests
 {
     // A realistically long staged path (~259 chars, over the 240 threshold), built from a REAL
     // worst-case file in a CORRECTLY-installed 7Bpencil.WeaponCamoAndStickers (the relative part
-    // is ~176 chars on its own — auto-generated preview filenames). A deep install root plus the
+    // is ~176 chars on its own - auto-generated preview filenames). A deep install root plus the
     // ModSync_Data\PendingUpdates\ staging prefix tips it over the Windows MAX_PATH cliff.
     private static string LongDrivePath() =>
         @"C:\Users\Rob\Documents\Applications\SPTarkov\FriedTown\ModSync_Data\PendingUpdates\" +
@@ -46,7 +46,7 @@ public class LongPathTests
     [Test]
     public void ShortPath_LeftUnchanged()
     {
-        // Below the threshold — the common case, must stay byte-for-byte identical.
+        // Below the threshold - the common case, must stay byte-for-byte identical.
         Assert.That(LongPath.Extended(@"C:\SPT\BepInEx\plugins\mod\file.png", windows: true),
             Is.EqualTo(@"C:\SPT\BepInEx\plugins\mod\file.png"));
     }

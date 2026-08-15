@@ -11,7 +11,7 @@ namespace ModSync.Server;
 ///
 /// **Wire/server translation** (new in SPT 4): the server runs from `&lt;game&gt;/SPT/` but the
 /// BepInEx client runs from `&lt;game&gt;/`. So every path crossing the wire needs to be expressed
-/// relative to whichever side will resolve it — they're not the same.
+/// relative to whichever side will resolve it - they're not the same.
 ///
 /// We use **game-root-relative paths as the wire format**, because that's what the client
 /// can directly hand to `Path.GetFullPath` / `Path.Combine`. The server stores paths in its
@@ -29,10 +29,10 @@ namespace ModSync.Server;
 /// </summary>
 public static class PathExt
 {
-    /// <summary>Convert all '/' to '\\' — for paths going out to the Windows BepInEx client.</summary>
+    /// <summary>Convert all '/' to '\\' - for paths going out to the Windows BepInEx client.</summary>
     public static string WinPath(string p) => p.Replace('/', '\\');
 
-    /// <summary>Convert all '\\' to '/' — for normalizing paths before glob matching.</summary>
+    /// <summary>Convert all '\\' to '/' - for normalizing paths before glob matching.</summary>
     public static string UnixPath(string p) => p.Replace('\\', '/');
 
     /// <summary>
@@ -42,7 +42,7 @@ public static class PathExt
     /// `SPT/` (path is inside the SPT subdir, client needs the prefix to reach it).
     ///
     /// Separator-aware: handles both `/` and `\`. The output uses whatever the input used
-    /// for the separator after the modified prefix — we only mutate the leading 3 chars
+    /// for the separator after the modified prefix - we only mutate the leading 3 chars
     /// (or prepend 4 chars), the rest is untouched.
     /// </summary>
     public static string ToWirePath(string serverPath)
@@ -66,11 +66,11 @@ public static class PathExt
     /// + `Path.GetFullPath` on the server. Windows treats both `/` and `\` as separators
     /// so either works, but Linux (where SPT 4 servers often run in Docker) treats `\` as
     /// a literal filename character. A backslash prefix like `..\BepInEx/...` produces a
-    /// mixed-separator string that `Path.GetFullPath` won't normalize on Linux — the
+    /// mixed-separator string that `Path.GetFullPath` won't normalize on Linux - the
     /// `..\` doesn't get collapsed and the request fails sanitization with a confusing
     /// "not in any enabled sync path" error. Forward slash works on both platforms.
     ///
-    /// Only the literal `SPT/` (with trailing separator) is stripped — a syncpath named
+    /// Only the literal `SPT/` (with trailing separator) is stripped - a syncpath named
     /// `SPTfoo` won't false-match.
     /// </summary>
     public static string ToServerPath(string wirePath)

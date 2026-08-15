@@ -12,6 +12,7 @@ public class SyncPath(
     string path,
     string name = "",
     bool enabled = true,
+    bool optional = false,
     bool enforced = false,
     bool silent = false,
     bool restartRequired = true,
@@ -23,6 +24,20 @@ public class SyncPath(
     public readonly string path = path;
     public readonly string name = string.IsNullOrEmpty(name) ? path : name;
     public readonly bool enabled = enabled;
+
+    /// <summary>
+    /// True = give the player a working checkbox for this path in the F12 menu, with
+    /// <see cref="enabled"/> as its default state. This is the only way to offer a path that
+    /// is synced BY DEFAULT but can still be turned off from the menu - `enabled:false`
+    /// already implies a toggle (opt-in, unticked), so it doesn't need this flag.
+    ///
+    /// Unticking UNINSTALLS what ModSync installed under the path, which is the point for a
+    /// folder of optional content but a disaster on one of the ../BepInEx catch-alls: those
+    /// carry the mods a player needs to connect, so one click would strip the modset. Hence
+    /// the default of false - the admin has to opt a path in, and can't fall into it.
+    /// </summary>
+    public readonly bool optional = optional;
+
     public readonly bool enforced = enforced;
     public readonly bool silent = silent;
     public readonly bool restartRequired = restartRequired;
@@ -30,20 +45,20 @@ public class SyncPath(
     /// <summary>
     /// False = never send this path (or its <see cref="baseFiles"/>) to a Fika headless client.
     /// Needed because a headless has no F12 menu and therefore ignores the opt-in toggles
-    /// entirely — it syncs every configured path, so `enabled:false` alone can't keep a
+    /// entirely - it syncs every configured path, so `enabled:false` alone can't keep a
     /// player-only mod off it. Defaults true (send to everyone), matching previous behaviour.
     /// </summary>
     public readonly bool headless = headless;
 
     /// <summary>
-    /// Files OUTSIDE this path that the mod replaces in the base game — e.g. DynamicMaps
+    /// Files OUTSIDE this path that the mod replaces in the base game - e.g. DynamicMaps
     /// swapping two Unity assemblies, or Tarkov DLSS 4.5 swapping nvngx_dlss.dll. Declaring
     /// them here binds them to this syncpath's opt-in state, so they're served only when the
     /// mod is active and are never pushed to a player who didn't ask for the mod.
     ///
     /// The original is backed up as &lt;file&gt;.modsync-bak on install and restored on removal.
     /// Because those backups are the ONLY proof ModSync installed the mod, a syncpath whose
-    /// baseFiles are missing their backups is refused removal outright — deleting a base-game
+    /// baseFiles are missing their backups is refused removal outright - deleting a base-game
     /// file we never replaced would brick the client.
     /// </summary>
     public readonly List<string> baseFiles = baseFiles ?? [];

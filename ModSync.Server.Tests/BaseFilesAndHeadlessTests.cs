@@ -5,12 +5,12 @@ namespace ModSync.Server.Test;
 /// <summary>
 /// Tests for the two syncpath object-form options added in v0.12.6:
 ///
-///   • baseFiles — base-game files a mod REPLACES, living outside its own folder. They must
+///   • baseFiles - base-game files a mod REPLACES, living outside its own folder. They must
 ///     follow the syncpath's active state, so a player who opted out never receives them.
 ///     This replaced a hardcoded DynamicMaps special case; these tests are what stop it
 ///     regressing into "every opt-out client silently gets the mod's engine DLLs anyway".
 ///
-///   • headless — false means never send this path (or its baseFiles) to a Fika headless.
+///   • headless - false means never send this path (or its baseFiles) to a Fika headless.
 ///     Needed because a headless has no F12 menu and therefore IGNORES the opt-in toggles,
 ///     syncing everything it's offered. `enabled:false` alone cannot keep a mod off it.
 ///
@@ -29,7 +29,7 @@ public class BaseFilesAndHeadlessTests
         _pluginsDir = TestUtils.GetTemporaryDirectory();
         _baseDir = TestUtils.GetTemporaryDirectory();
 
-        // Stands in for EscapeFromTarkov_Data/Plugins/x86_64/nvngx_dlss.dll — a base-game
+        // Stands in for EscapeFromTarkov_Data/Plugins/x86_64/nvngx_dlss.dll - a base-game
         // file the mod replaces, deliberately OUTSIDE the mod's own folder.
         _baseFile = Path.Combine(_baseDir, "nvngx_dlss.dll");
         File.WriteAllText(_baseFile, "base-game-file");
@@ -94,7 +94,7 @@ public class BaseFilesAndHeadlessTests
     {
         // The real hazard: the base file also sits under an enclosing catch-all. Ownership is
         // claimed across ALL paths (active or not), so the opt-out carves it out rather than
-        // letting the catch-all hand it over anyway — the same rule that makes opt-in mods
+        // letting the catch-all hand it over anyway - the same rule that makes opt-in mods
         // work under ../BepInEx/plugins.
         var modDir = MakeModDir();
         var optOut = new SyncPath(modDir, enabled: false, baseFiles: [_baseFile]);
@@ -136,7 +136,7 @@ public class BaseFilesAndHeadlessTests
     public void BaseFiles_AreDownloadable_EvenThoughTheyLiveOutsideTheSyncPath()
     {
         // Caught on a live stack: the server offered nvngx_dlss.dll in the hash list, then
-        // answered the download with 400 "not in any enabled sync path" — because baseFiles
+        // answered the download with 400 "not in any enabled sync path" - because baseFiles
         // sit OUTSIDE their syncpath's folder and so fail the containment check. The client
         // retried forever and the mod could never install.
         var modDir = MakeModDir();
@@ -150,7 +150,7 @@ public class BaseFilesAndHeadlessTests
     [Test]
     public void UndeclaredFileOutsideSyncPaths_IsStillRejected()
     {
-        // The baseFiles allowance must widen the allowlist by EXACTLY the declared files —
+        // The baseFiles allowance must widen the allowlist by EXACTLY the declared files -
         // it must not open a traversal hole to anything else outside the syncpaths.
         var modDir = MakeModDir();
         var syncPath = new SyncPath(modDir, enabled: false, baseFiles: [_baseFile]);
@@ -187,7 +187,7 @@ public class BaseFilesAndHeadlessTests
     public async Task HeadlessFalsePath_InsideCatchAll_DoesNotLeakViaCatchAll()
     {
         // Regression: `headless:false` used to skip the path outright, BEFORE claiming its
-        // files for ownership — so an enclosing catch-all (../BepInEx/patchers for a
+        // files for ownership - so an enclosing catch-all (../BepInEx/patchers for a
         // prepatcher-based mod like Tarkov DLSS 4.5) walked over them and served them to the
         // headless anyway. Caught on a live stack: the headless had TarkovDLSS45 installed.
         var modDir = MakeModDir();
@@ -227,7 +227,7 @@ public class BaseFilesAndHeadlessTests
     [Test]
     public async Task HeadlessDefaultsTrue_HeadlessRequest_StillServed()
     {
-        // Default must stay `true` — every existing config predates this option and must
+        // Default must stay `true` - every existing config predates this option and must
         // keep behaving exactly as before.
         var modDir = MakeModDir();
         var syncPath = new SyncPath(modDir);

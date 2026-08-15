@@ -21,7 +21,7 @@ namespace ModSync.Server;
 /// headless install, and the server applies the <c>headlessIncludes</c> allowlist to
 /// the BepInEx/plugins folder before returning hashes.
 ///
-/// Players' per-install opt-outs are not seen by the server — they live in each
+/// Players' per-install opt-outs are not seen by the server - they live in each
 /// install's <c>ModSync_Data/Exclusions.jsonc</c> and are applied client-side after
 /// the server's response arrives.
 ///
@@ -30,7 +30,7 @@ namespace ModSync.Server;
 /// arrives, SPT iterates registered listeners and calls <see cref="CanHandle"/> on
 /// each; the first one that says yes gets <see cref="Handle"/> invoked. SPT's own
 /// <c>SptHttpListener</c> only matches routes registered on its internal router,
-/// so our <c>/modsync/</c> prefix is safe — there's no conflict.
+/// so our <c>/modsync/</c> prefix is safe - there's no conflict.
 ///
 /// **Initialize() setter pattern.** This listener is constructed by DI during the
 /// container build, but the <see cref="Config"/> it needs comes from disk and is
@@ -39,7 +39,7 @@ namespace ModSync.Server;
 /// then, <c>CanHandle</c> returns false and the listener is invisible to clients.
 ///
 /// **`InjectionType.Singleton` is mandatory here**, not optional. SPT's DI defaults
-/// to transient — every resolution builds a fresh instance. Without Singleton,
+/// to transient - every resolution builds a fresh instance. Without Singleton,
 /// `ModSyncMod`'s ctor gets one instance (and we call Initialize on it), but SPT's
 /// `HttpServer` constructor takes `IEnumerable&lt;IHttpListener&gt;` which triggers a
 /// SEPARATE resolution → a different instance ends up in the dispatch list, with
@@ -53,7 +53,7 @@ public class ModSyncHttpListener(
     HttpFileUtil httpFileUtil) : IHttpListener
 {
     // Filled in by Initialize() after config has been loaded from disk.
-    // `Config?` (nullable) — keeps the compiler happy that this might be null
+    // `Config?` (nullable) - keeps the compiler happy that this might be null
     // before init, and forces a null-check before use.
     private Config? _config;
     private SyncUtil? _syncUtil;
@@ -62,7 +62,7 @@ public class ModSyncHttpListener(
     /// <summary>
     /// JSON options reused across all responses.
     ///
-    /// `IncludeFields = true` — this is the important one. ModFile/SyncPath in
+    /// `IncludeFields = true` - this is the important one. ModFile/SyncPath in
     /// ModSync.Utility use public *fields* (not properties) named `hash`, `path`,
     /// etc. System.Text.Json ignores fields by default; turning this on makes it
     /// pick them up so the JSON keys match what the client deserializes by name.
@@ -79,7 +79,7 @@ public class ModSyncHttpListener(
     public void Initialize(Config config, string modVersion)
     {
         _config = config;
-        // Each ISptLogger&lt;T&gt; tags its log lines with T's name — so we pass SyncUtil's
+        // Each ISptLogger&lt;T&gt; tags its log lines with T's name - so we pass SyncUtil's
         // own typed logger here rather than reusing our listener's, keeping the source
         // category accurate in the SPT log output.
         _syncUtil = new SyncUtil(config, syncUtilLogger);
@@ -156,8 +156,8 @@ public class ModSyncHttpListener(
         var isHeadless = context.Request.Query.ContainsKey("headless");
 
         // Version gate. A client only gets the full config if it announces a version matching
-        // ours; anything else — a different version, or a pre-0.12.6 client that doesn't send
-        // one at all — receives ONLY ModSync's own components.
+        // ours; anything else - a different version, or a pre-0.12.6 client that doesn't send
+        // one at all - receives ONLY ModSync's own components.
         //
         // This is what makes self-update-first work for clients that don't yet have the
         // self-update-first code. A v0.12.5 client computes its whole diff (including
@@ -170,7 +170,7 @@ public class ModSyncHttpListener(
         if (!versionMatches)
             logger.LogWithColor(
                 $"Corter-ModSync: client reports version '{clientVersion ?? "unknown"}' (server is {_modVersion}) "
-                + "— serving ModSync's own components only until it updates.",
+                + "- serving ModSync's own components only until it updates.",
                 LogTextColor.Gray);
 
         await WriteJsonAsync(context, 200, BuildPathsResponse(_config!.SyncPaths, isHeadless, versionMatches));
@@ -178,13 +178,13 @@ public class ModSyncHttpListener(
 
     /// <summary>
     /// Builds the /modsync/paths payload. Pure function, split out from the HTTP handler so the
-    /// audience rules can be tested without HTTP plumbing — a mismatch between what this
+    /// audience rules can be tested without HTTP plumbing - a mismatch between what this
     /// advertises and what <see cref="SyncUtil.HashModFilesAsync"/> serves once shipped a
     /// KeyNotFoundException to every headless client, and nothing caught it.
     ///
     /// Per path: WinPath (normalize separators) → ToWirePath (server-cwd-relative →
     /// game-root-relative). Projected into a DTO rather than mutating the shared SyncPath
-    /// instances, which are held by Config. Member names are lowercase on purpose — the
+    /// instances, which are held by Config. Member names are lowercase on purpose - the
     /// serializer applies no naming policy, so these are the literal JSON keys the client
     /// deserializes by name.
     /// </summary>
@@ -197,7 +197,7 @@ public class ModSyncHttpListener(
 
         // Don't advertise a path we will never serve to this audience. HashModFilesAsync skips
         // `headless:false` paths for headless clients, so listing them here would leave a
-        // client asking for a path that comes back with no entry at all — which older clients
+        // client asking for a path that comes back with no entry at all - which older clients
         // (<=0.12.5) index directly and throw KeyNotFoundException on, failing ModSync's load.
         // Filtering at the source keeps both endpoints telling the same story.
         var visiblePaths = isHeadless
@@ -208,6 +208,7 @@ public class ModSyncHttpListener(
             path: PathExt.ToWirePath(PathExt.WinPath(sp.path)),
             name: sp.name,
             enabled: sp.enabled,
+            optional: sp.optional,
             // The Updater (desktop players) and patcher (headless) are each enforced for the
             // audience that runs them and relaxed for the other.
             enforced: ConfigUtil.ResolveEnforced(sp, isHeadless),
@@ -221,7 +222,7 @@ public class ModSyncHttpListener(
 
     /// <summary>
     /// GET /modsync/exclusions → flat list of exclusion glob strings the client
-    /// should ignore in its local-side walk. Same list for everyone — the client
+    /// should ignore in its local-side walk. Same list for everyone - the client
     /// combines this with its own Exclusions.json before walking.
     /// </summary>
     private async Task HandleExclusionsAsync(HttpContext context)
@@ -233,12 +234,12 @@ public class ModSyncHttpListener(
     /// GET /modsync/hashes[?headless=1][&amp;path=X&amp;path=Y] → nested dict:
     /// syncpath → file → ModFile.
     ///
-    /// <c>?headless=1</c> (presence-only — value ignored) tells the server to apply
+    /// <c>?headless=1</c> (presence-only - value ignored) tells the server to apply
     /// <c>headlessIncludes</c> as an allowlist over BepInEx/plugins. Client appends it
     /// when it detects Fika headless.
     ///
     /// <c>?path</c> query params are optional. If provided, only those syncpaths are
-    /// hashed — except syncpaths marked <c>enforced=true</c> are always included
+    /// hashed - except syncpaths marked <c>enforced=true</c> are always included
     /// (built-ins like the ModSync DLL must always be reported so the client can
     /// self-update).
     /// </summary>
@@ -248,7 +249,7 @@ public class ModSyncHttpListener(
         var isHeadless = query.ContainsKey("headless");
 
         // Always hash across ALL configured syncpaths so ownership (most-specific wins) is
-        // computed over the full set — a disabled/opt-out override must carve its files out
+        // computed over the full set - a disabled/opt-out override must carve its files out
         // of an enclosing catch-all even though the client didn't request it. `isActive`
         // then limits what's actually RETURNED to the paths the client asked for (plus
         // enforced, which always applies). Without this, a toggled-off optional path would
@@ -268,7 +269,7 @@ public class ModSyncHttpListener(
         }
 
         // SyncUtil returns paths in server-cwd terms (e.g. `..\BepInEx\plugins\...`).
-        // Translate every outer and inner key to wire form before sending — the client
+        // Translate every outer and inner key to wire form before sending - the client
         // resolves these relative to its own cwd (game root) and would fail otherwise.
         var serverHashes = await _syncUtil!.HashModFilesAsync(_config!.SyncPaths, isHeadless, isActive);
         var wireHashes = serverHashes.ToDictionary(
@@ -340,6 +341,7 @@ public record SyncPathDto(
     string path,
     string name,
     bool enabled,
+    bool optional,
     bool enforced,
     bool silent,
     bool restartRequired,

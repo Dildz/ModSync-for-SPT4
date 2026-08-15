@@ -3,7 +3,7 @@ using ModSync.Utility;
 namespace ModSync.Server.Test;
 
 /// <summary>
-/// Tests for the Config class filter methods — IsExcluded, IsHeadlessAllowed,
+/// Tests for the Config class filter methods - IsExcluded, IsHeadlessAllowed,
 /// IsManagedAllowed, IsHeadlessManagedAllowed. These are pure logic with no file I/O.
 /// Ported from the original TypeScript config.test.ts "Config" describe block.
 /// </summary>
@@ -63,7 +63,7 @@ public class ConfigTests
     public void IsExcluded_BackslashPath_NormalizesAndMatches()
     {
         var config = MakeConfig(exclusions: ["**/*.nosync"]);
-        // Server may receive backslash-separated paths on Windows — should normalize
+        // Server may receive backslash-separated paths on Windows - should normalize
         Assert.That(config.IsExcluded(@"plugins\SAIN\SAIN.dll.nosync"), Is.True);
     }
 

@@ -1,29 +1,37 @@
 {
     // ┌─────────────────────────────────────────────────────────────────────┐
-    // │  WIKI — FULL CONFIG GUIDE:                                          │
+    // │  WIKI - FULL CONFIG GUIDE:                                          │
     // │  https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration       │
-    // │  Every option below is documented there with examples.              │
     // └─────────────────────────────────────────────────────────────────────┘
 
     // SPT 4 directory layout: server runs from <gameRoot>/SPT/.
     //   "<gameRoot>/BepInEx/..."  →  client-side mods (../BepInEx/...)
     //
     // The `user/mods` folder is NOT a syncPath. Server mods stay server-only
-    // by design — their client-facing components ship as separate BepInEx
-    // plugins, which DO sync via the paths below.
+    // by design - their client-facing components ship as separate BepInEx
+    // plugins, which DO sync via the paths below. (One edge case can justify
+    // changing that; it's written up on the wiki, deliberately not here.)
     //
-    // Each path/entry can be configured as EITHER:
-    //   1. A plain string  — sync this path with all defaults (what we use below).
-    //   2. An object       — same path, but override HOW it syncs. A plain string
-    //                        is just shorthand for an object with every option at
-    //                        its default.
+    // Each path/entry is EITHER:
+    //   1. A plain string  - sync this path with all defaults (what we use below).
+    //   2. An object       - the same path, with some of those defaults overridden.
     //
-    // The seven options:
+    // The eight options:
     //
     //     "path"            (required)        Folder or file to sync. Globs NOT allowed.
     //     "name"            (default: path)   Friendly label shown in the client's F12 sync menu.
-    //     "enabled"         (default: true)   true = opt-out (synced unless client unchecks it),
-    //                                         false = opt-in (client must check the box first).
+    //                                         Keep these unique - the client stores each F12
+    //                                         toggle under its name.
+    //     "enabled"         (default: true)   true = synced to everyone by default,
+    //                                         false = opt-in, the client ticks it in F12 first.
+    //                                         Whether the client can CHANGE that is decided by
+    //                                         "optional" and "enforced" below.
+    //     "optional"        (default: false)  true = the client gets a working F12 checkbox for
+    //                                         this path, starting in the "enabled" state. Use it
+    //                                         for a mod installed by default but still refusable
+    //                                         ("enabled": false is already a checkbox, so opt-in
+    //                                         mods don't need this). Unticking UNINSTALLS what
+    //                                         ModSync put there - never mark a catch-all optional.
     //     "enforced"        (default: false)  true = server wins, always. Client can't opt out,
     //                                         can't keep local edits, can't exclude it. Use for
     //                                         files every client MUST match (e.g. patchers).
@@ -32,7 +40,7 @@
     //                                         true  = apply quietly in the background on load.
     //     "headless"        (default: true)   false = NEVER send to a Fika headless client.
     //                                         Headless has no F12 menu so it ignores the opt-in
-    //                                         toggles and takes everything offered — this is the
+    //                                         toggles and takes everything offered - this is the
     //                                         only way to mark a mod player-only (GPU/UI mods).
     //     "baseFiles"       (default: none)   Base-game files this mod REPLACES, living outside
     //                                         its own folder. They follow this entry's opt-in
@@ -44,20 +52,29 @@
     // Paths are matched MOST-SPECIFIC FIRST, so you can set defaults on a folder
     // and override just one child inside it (e.g. enforce a single config file).
     //
-    // TWO WAYS TO USE THIS (it's one dial, not two modes — see the wiki):
-    //   Lazy    — keep just the 3 catch-alls below; everything syncs and each
+    // RETIRING A MOD: delete its files from the server AND delete its entry here.
+    // ModSync remembers what it served (.modsync-served.json, next to this file) and
+    // keeps offering the removed entry as EMPTY, which is what tells a client to
+    // uninstall its copy - whenever it next connects, however long that takes.
+    // Re-adding the entry cancels it; otherwise clear the record file when you're done.
+    // Delete the entry but KEEP the files and the opposite happens, by design: the
+    // entry was carving the mod out of the catch-alls, so without it they take over
+    // and sync the mod to EVERYONE.
+    //
+    // TWO WAYS TO USE THIS (it's one dial, not two modes - see the wiki):
+    //   Lazy    - keep just the 3 catch-alls below; everything syncs and each
     //             player declines what they don't want via their own
     //             ModSync_Data/Exclusions.jsonc. Best for large modsets.
-    //   Curated — ALSO name mods as objects with "enabled": false; those appear
-    //             in the player's F12 menu as opt-IN toggles. Best for slim sets.
-    //   Mix     — name the few you want optional; the catch-alls cover the rest.
+    //   Curated - ALSO name mods as objects, using "enabled" / "optional" to put
+    //             them in the player's F12 menu as toggles. Best for slim sets.
+    //   Mix     - name the few you want optional; the catch-alls cover the rest.
     "syncPaths": [
         "../BepInEx/plugins",
         "../BepInEx/patchers",
         "../BepInEx/config"
 
         // ── Object-form examples (uncomment & adapt) ──
-        // Enforce patchers — a version mismatch on a patcher DLL can otherwise
+        // Enforce patchers - a version mismatch on a patcher DLL can otherwise
         // leave a client silently stuck:
         //
         // {
@@ -66,7 +83,7 @@
         //     "enforced": true
         // }
         //
-        // Opt-IN mod — shows in the F12 menu unticked; the player ticks it to
+        // Opt-IN mod - shows in the F12 menu unticked; the player ticks it to
         // receive it. A mod's plugin and config are SEPARATE paths, so to make
         // its config optional too, add its ../BepInEx/config file the same way:
         //
@@ -77,19 +94,33 @@
         //     "restartRequired": false
         // }
         //
+        // Opt-OUT mod - synced by default, but the player can untick it in the F12
+        // menu, which uninstalls it. For a mod you want everyone on unless they
+        // actively say no:
+        //
+        // {
+        //     "path": "../BepInEx/plugins/SomeClientMod",
+        //     "name": "Optional: Some Client Mod",
+        //     "optional": true,
+        //     "restartRequired": false
+        // }
+        //
+        // Do NOT mark the three catch-alls above optional - they carry the mods
+        // your players need to connect, so one untick would strip the modset.
+        //
         // ── Mods that REPLACE base-game files ──
         // Some mods ship modified copies of files the game itself installs, rather
         // than adding their own. Those files must follow the mod's opt-in state, or
         // a player who declined the mod ends up with its modified engine files and
-        // no mod — a broken install. List them in "baseFiles" and ModSync backs the
+        // no mod - a broken install. List them in "baseFiles" and ModSync backs the
         // original up as <file>.modsync-bak, restoring it if the mod is removed.
         //
         // IMPORTANT: if a player installed the mod BY HAND, no backup exists, so
         // ModSync has no original to put back. It then refuses to remove that mod at
-        // all and says so in the F12 menu — deleting a base-game file it never
+        // all and says so in the F12 menu - deleting a base-game file it never
         // replaced could break the client beyond repair.
         //
-        // Tarkov DLSS 4.5 — replaces the NVIDIA runtime DLL. Only benefits RTX
+        // Tarkov DLSS 4.5 - replaces the NVIDIA runtime DLL. Only benefits RTX
         // 3000-series and newer, and is useless on a headless, so: opt-in + no
         // headless. One entry covers BOTH halves of the mod:
         //
@@ -108,13 +139,13 @@
         // no longer read back, hanging the client on the loading screen. Tell
         // players to pick an explicit DLSS preset (not "Default") BEFORE the
         // mod installs. If a client does hang, edit the "DLSSPreset" line in
-        // user/sptSettings/Graphics.ini to a real preset — that keeps their
+        // user/sptSettings/Graphics.ini to a real preset - that keeps their
         // other graphics settings. Removing the mod also leaves the preset on
         // a mod-added value, so the same edit applies.
         //
-        // DynamicMaps — replaces two Unity assemblies. Unlike the DLSS DLL these
+        // DynamicMaps - replaces two Unity assemblies. Unlike the DLSS DLL these
         // CANNOT be re-downloaded, so a hand-installed copy is unrecoverable.
-        // headless:false — a headless renders nothing, so a map overlay is dead
+        // headless:false - a headless renders nothing, so a map overlay is dead
         // weight there, and it must never receive DM's replacement assemblies:
         //
         // {
@@ -136,31 +167,36 @@
     // overwritten, and the universal `.nosync` opt-out pattern.
     // See the wiki [exclusions] for guidance on what belongs here.
     "exclusions": [
-        // SPT / BepInEx baseline — NOT mods. These ship with SPT (or are
+        // SPT / BepInEx baseline - NOT mods. These ship with SPT (or are
         // generated per-machine by BepInEx), so every client already has its
         // own. ModSync doesn't manage SPT itself, and an SPT update replaces
-        // them — never push the host's copies over a client's.
+        // them - never push the host's copies over a client's.
         "../BepInEx/plugins/spt",
         "../BepInEx/patchers/spt-prepatch.dll",
         "../BepInEx/config/BepInEx.cfg",
         "../BepInEx/config/com.bepis.bepinex.configurationmanager.cfg",
 
-        // Fika headless DLL — must never reach regular players. Headless
+        // Fika headless DLL - must never reach regular players. Headless
         // instances get this from their image / manual install, not via sync.
         "../BepInEx/plugins/Fika/Fika.Headless.dll",
 
-        // Raid-Review DLL — must never reach regular players. Headless
+        // Raid-Review DLL - must never reach regular players. Headless
         // instances get this from the 'headlessIncludes allow list'.
         // "../BepInEx/plugins/RAID_REVIEW.dll",
 
-        // Universal per-file opt-out — drop a `.nosync` or `.nosync.txt` file
+        // Universal per-file opt-out - drop a `.nosync` or `.nosync.txt` file
         // next to any mod folder/file to skip it
         "**/*.nosync",
         "**/*.nosync.txt",
 
-        // Git repo metadata — some mods are GitHub-only and may contain files
+        // Git repo metadata - some mods are GitHub-only and may contain files
         // that aren't needed at runtime.
-        "**/.git"
+        "**/.git",
+
+        // ModSync's own server-side bookkeeping (what it served last boot, used to
+        // retire removed mods). Only reachable at all if you sync "user/mods";
+        // there is no reason for a client to carry the server's record.
+        "**/.modsync-served.json"
     ],
 
     //-----------------------------------------------------------------------
@@ -170,10 +206,10 @@
     // `exclusions` above still applies).
     //
     // A headless client only receives plugin paths that match an entry here.
-    // Empty array (the default) means headless gets ZERO plugins — you MUST
+    // Empty array (the default) means headless gets ZERO plugins - you MUST
     // populate this if you run a headless instance.
     //
-    // Entries should be EXPLICIT — either a mod folder or an individual DLL.
+    // Entries should be EXPLICIT - either a mod folder or an individual DLL.
     // Don't use globs like "*.dll" here. The whole point of an allowlist is
     // being deliberate about what reaches headless; a careless glob can
     // accidentally re-include everything you meant to keep out.
@@ -186,7 +222,7 @@
         "../BepInEx/plugins/Fika",
         "../BepInEx/plugins/Corter-ModSync"   // ← add a comma here before uncommenting below
 
-        // Bot AI + behavior (example entries — add your own below)
+        // Bot AI + behavior (example entries - add your own below)
         // "../BepInEx/plugins/SAIN",
         // "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll",
         // "../BepInEx/plugins/DrakiaXYZ-Waypoints"
@@ -198,13 +234,13 @@
     //
     // Some mods ship Unity assemblies that need to be placed in
     // EscapeFromTarkov_Data/Managed/ on every player client. List the
-    // DLL filenames here (filename only — no folder path).
+    // DLL filenames here (filename only - no folder path).
     //
     // The server reads from ../EscapeFromTarkov_Data/Managed/ but only serves
     // the files you list here. This keeps it safe in both setups:
     //   - Docker/Linux server: that folder is a staging area with ONLY mod DLLs
     //   - Windows (host is also a player): that folder contains the full EFT
-    //     install — the allowlist prevents vanilla Unity DLLs from being synced
+    //     install - the allowlist prevents vanilla Unity DLLs from being synced
     //
     // On install:  if the file already exists on the client, the original is
     //              backed up as <filename>.modsync-bak before being replaced.
@@ -212,7 +248,7 @@
     //              If no backup was made (file was new), the file is deleted.
     // See the wiki [managedIncludes] for extra details.
     "managedIncludes": [
-        // DynamicMaps example — remove or replace with your own mod's files:
+        // DynamicMaps example - remove or replace with your own mod's files:
         // "Unity.VectorGraphics.dll",
         // "Unity.InternalAPIEngineBridge.003.dll"
     ],
@@ -224,7 +260,6 @@
     // Headless runs the game simulation without the rendering stack, so Managed
     // files are almost never needed there. Leave this empty unless a mod's install
     // instructions specifically say it is required on headless.
-    // Will probably always be empty, but the option is here for future use if needed.
     "headlessManagedIncludes": [
     ]
 }

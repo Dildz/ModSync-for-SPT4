@@ -1,4 +1,4 @@
-# Release pipeline — triggered when a git tag matching `v*` is pushed.
+# Release pipeline - triggered when a git tag matching `v*` is pushed.
 #
 # Tag a commit (e.g. `git tag v0.11.1-pre1 && git push --tags`) and GitHub Actions
 # will: build the whole solution, run the unit tests, stage the binaries into the
@@ -86,14 +86,14 @@ jobs:
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll"        "$stage/BepInEx/plugins/Corter-ModSync/"
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll.config" "$stage/BepInEx/plugins/Corter-ModSync/"
 
-          # Preloader patcher — applies PendingUpdates before plugin DLLs are loaded
+          # Preloader patcher - applies PendingUpdates before plugin DLLs are loaded
           Copy-Item "ModSync.Patcher/bin/Release/net472/Corter-ModSync-Prepatch.dll" "$stage/BepInEx/patchers/"
 
           # Server mod + default config (bundled so admins can edit before first run)
           Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT/user/mods/Corter-ModSync/"
-          # (config.jsonc intentionally not staged — see the layout note above)
+          # (config.jsonc intentionally not staged - see the layout note above)
 
-          # Updater — single-file output from the publish step above. Just the .exe
+          # Updater - single-file output from the publish step above. Just the .exe
           # (~1.6MB) with Newtonsoft.Json, deps.json, and runtimeconfig.json all bundled in.
           Copy-Item "ModSync.Updater/bin/Release/net9.0-windows/win-x64/publish/ModSync.Updater.exe" "$stage/"
 
@@ -111,27 +111,27 @@ jobs:
         with:
           files: "Corter-ModSync-${{ github.ref_name }}.zip"
           # Tags containing "-pre" (e.g. v0.11.1-pre1) are marked as pre-release on
-          # GitHub — they don't show up in the "Latest" link, and users get a warning.
+          # GitHub - they don't show up in the "Latest" link, and users get a warning.
           prerelease: ${{ contains(github.ref_name, '-pre') || contains(github.ref_name, '-rc') }}
           # Auto-generate changelog from PR/commit history between this tag and the previous one.
           generate_release_notes: true
           # !!! UPDATE THE BODY BELOW BEFORE TAGGING A NEW RELEASE !!!
-          # This text is baked into every release page verbatim — a stale body means the
+          # This text is baked into every release page verbatim - a stale body means the
           # release ships with the PREVIOUS version's changelog (happened on v0.12.4).
           body: |
             ## Changes
 
-            - **New: `baseFiles` — sync mods that replace base-game files.** A syncPath can now list base-game files the mod overwrites (e.g. DLSS's `nvngx_dlss.dll`, DynamicMaps' Unity assemblies). ModSync backs the original up as `.modsync-bak` before replacing it and restores it when the mod is removed, so opting out puts the game back exactly as it was. This replaces the hardcoded DynamicMaps handling with a general mechanism any mod can use.
-            - **New: `headless` per syncPath** — set `"headless": false` and that path is never offered to a headless client. Useful for anything graphical (DLSS, map overlays), which a headless renders nothing for and simply wastes disk and bandwidth on.
+            - **New: `baseFiles` - sync mods that replace base-game files.** A syncPath can now list base-game files the mod overwrites (e.g. DLSS's `nvngx_dlss.dll`, DynamicMaps' Unity assemblies). ModSync backs the original up as `.modsync-bak` before replacing it and restores it when the mod is removed, so opting out puts the game back exactly as it was. This replaces the hardcoded DynamicMaps handling with a general mechanism any mod can use.
+            - **New: `headless` per syncPath** - set `"headless": false` and that path is never offered to a headless client. Useful for anything graphical (DLSS, map overlays), which a headless renders nothing for and simply wastes disk and bandwidth on.
             - **New: ModSync updates itself first, then restarts.** When the client's version doesn't match the server's, the server serves only ModSync's own components until the client is current. This removes a class of failures where an out-of-date client tried to interpret a newer server's response.
-            - **New: `config_default.jsonc`** — the server writes the current shipped defaults alongside your config on every boot, so you can diff new options in without your own file ever being touched.
-            - **New: notification for missing config options** — if a release adds a top-level option your config lacks, the server logs it once at startup. It never rewrites your file.
-            - **Rework: the F12 menu.** Optional mods get a real checkbox that installs and uninstalls them. Enforced and built-in paths are now *shown* rather than hidden — as a one-line explanation with no control, so you can see what the server manages without being able to break it. The three catch-all paths are hidden entirely.
+            - **New: `config_default.jsonc`** - the server writes the current shipped defaults alongside your config on every boot, so you can diff new options in without your own file ever being touched.
+            - **New: notification for missing config options** - if a release adds a top-level option your config lacks, the server logs it once at startup. It never rewrites your file.
+            - **Rework: the F12 menu.** Optional mods get a real checkbox that installs and uninstalls them. Enforced and built-in paths are now *shown* rather than hidden - as a one-line explanation with no control, so you can see what the server manages without being able to break it. The three catch-all paths are hidden entirely.
             - **The zip no longer ships `config.jsonc`.** The server writes it on first boot if missing, so extracting over an existing install can no longer clobber your config.
 
             ## Upgrade notes
 
-            Unzip into your game root as usual — clients update via sync, no manual steps.
+            Unzip into your game root as usual - clients update via sync, no manual steps.
 
             Your existing `config.jsonc` is untouched: `baseFiles` and `headless` are optional and default to the previous behaviour. To use them, copy the examples from the regenerated `config_default.jsonc`.
 
@@ -139,7 +139,7 @@ jobs:
 
             ## Docs
 
-            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#mods-that-replace-base-game-files) — how `baseFiles` backs up and restores originals, and why a hand-installed mod gets locked
-            - [Usage Examples](https://github.com/Dildz/ModSync-for-SPT4/wiki/UsageExamples) — worked `config.jsonc` setups, from minimal to a real server
+            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#mods-that-replace-base-game-files) - how `baseFiles` backs up and restores originals, and why a hand-installed mod gets locked
+            - [Usage Examples](https://github.com/Dildz/ModSync-for-SPT4/wiki/UsageExamples) - worked `config.jsonc` setups, from minimal to a real server
 
             **Coming from before v0.12.4?** See the v0.12.4 notes for the one-time `BepInEx/patchers/Corter-ModSync/` folder cleanup on the server/headless.

@@ -49,7 +49,7 @@ public class Plugin : BaseUnityPlugin
     ///
     /// Why this matters: an outdated plugin cannot be trusted to interpret a newer server's
     /// config. v0.12.6 added opt-in carve-outs and baseFiles, and a v0.12.5 client reading that
-    /// config concluded a mod it should have left alone had been deleted server-side — and
+    /// config concluded a mod it should have left alone had been deleted server-side - and
     /// offered to remove it, with none of the safety checks that shipped alongside the feature.
     /// Upstream only logged a warning here and carried on; this makes the warning mean something.
     /// </summary>
@@ -57,28 +57,28 @@ public class Plugin : BaseUnityPlugin
 
     /// <summary>
     /// Content written to a fresh <c>ModSync_Data/Exclusions.jsonc</c> on first run.
-    /// Same template for player and headless installs — no hardcoded mod names. The
+    /// Same template for player and headless installs - no hardcoded mod names. The
     /// in-file comment header explains the semantic so admins/players can hand-edit
     /// the file without consulting docs.
     ///
     /// <c>@"..."</c> is a verbatim string literal: backslashes are taken literally,
     /// and the only escape sequence is <c>""</c> for a single double-quote.
     /// </summary>
-    private const string EXCLUSIONS_SEED_TEMPLATE = @"// Personal denylist — paths or globs ModSync should NOT install or keep
+    private const string EXCLUSIONS_SEED_TEMPLATE = @"// Personal denylist - paths or globs ModSync should NOT install or keep
 // installed on this machine. Applied on top of the server's exclusions.
 //
 // Semantics:
 //   - If ModSync previously installed a listed file, it will be REMOVED
 //     on next sync.
 //   - If you copied the file in by hand (ModSync never installed it),
-//     ModSync leaves it alone — only files ModSync installed are touched.
+//     ModSync leaves it alone - only files ModSync installed are touched.
 //   - Listed files won't be downloaded going forward.
 //
-// On a Fika headless install this file is usually EMPTY — the server's
+// On a Fika headless install this file is usually EMPTY - the server's
 // `headlessIncludes` allowlist controls what reaches headless. Use this
 // file only for per-install overrides on top of the allowlist.
 //
-// Edits to this file are read at game startup, not live — restart EFT
+// Edits to this file are read at game startup, not live - restart EFT
 // to apply.
 //
 // You do NOT need to list ModSync's own components here. The headless-only
@@ -159,12 +159,12 @@ public class Plugin : BaseUnityPlugin
     /// <c>.modsync-bak</c> when IT installs one, so those backups are the only proof of
     /// ownership. Without them there's no original to restore, and removing the mod's own
     /// files while its replaced base files stay behind leaves the client in a mismatched
-    /// state — for DynamicMaps that means an infinite load, unrecoverable short of
+    /// state - for DynamicMaps that means an infinite load, unrecoverable short of
     /// reinstalling SPT. So: no backups, hands off the whole mod.
     ///
     /// EVERY declared baseFile must have a backup. A partial state (one file already matched
     /// what the server served, so it was never staged or backed up) would otherwise restore
-    /// one file and delete another — exactly the mismatch we're preventing.
+    /// one file and delete another - exactly the mismatch we're preventing.
     /// </summary>
     private static bool IsUnsafeToRemove(SyncPath syncPath)
     {
@@ -173,7 +173,7 @@ public class Plugin : BaseUnityPlugin
 
         // Only a mod that's actually PRESENT can be unsafe to remove. Without this check a
         // player who has never installed the mod would also fail the backup test (no mod, so
-        // no backups) and the entry would lock itself as un-tickable — they could never opt IN.
+        // no backups) and the entry would lock itself as un-tickable - they could never opt IN.
         if (!IsInstalledLocally(syncPath.path))
             return false;
 
@@ -182,22 +182,26 @@ public class Plugin : BaseUnityPlugin
     }
 
     /// <summary>
-    /// An "optional" path is one the player genuinely chooses: opt-in (<c>enabled:false</c>)
-    /// and not enforced by the server. Only these get a working F12 checkbox — everything
-    /// else is shown for transparency but drawn as text (see <see cref="InfoOnlyDrawer"/>).
+    /// An "optional" path is one the player genuinely chooses, and only these get a working
+    /// F12 checkbox - everything else is shown for transparency but drawn as text (see
+    /// <see cref="InfoOnlyDrawer"/>). Two ways to be one:
+    ///   • <c>enabled:false</c> - opt-in, the toggle starts unticked
+    ///   • <c>optional:true</c> - the admin marked it player-choosable; <c>enabled</c> then
+    ///     only decides whether the toggle starts ticked
+    /// Either way the server has the final say: <c>enforced</c> paths are never a choice.
     /// </summary>
     private static bool IsOptional(SyncPath syncPath) =>
-        !syncPath.enabled
+        (syncPath.optional || !syncPath.enabled)
         && !syncPath.enforced
         // A DM install ModSync doesn't own can't be removed safely, so don't offer a switch
-        // that would silently do nothing when flipped — show the reason instead.
+        // that would silently do nothing when flipped - show the reason instead.
         && !IsUnsafeToRemove(syncPath);
 
     /// <summary>
     /// Which syncpaths appear in the F12 menu at all. Three kinds earn a place:
-    ///   • opt-in mods — the player's actual choices, drawn as real checkboxes
-    ///   • enforced paths — shown read-only so a player can SEE what the server pins
-    ///   • ModSync's own components — same, so the mod isn't invisible in its own menu
+    ///   • opt-in mods - the player's actual choices, drawn as real checkboxes
+    ///   • enforced paths - shown read-only so a player can SEE what the server pins
+    ///   • ModSync's own components - same, so the mod isn't invisible in its own menu
     ///
     /// Everything else (the ../BepInEx/plugins|patchers|config catch-alls, and any other
     /// enabled:true path) is hidden: it's neither a choice nor a server-pinned guarantee, so
@@ -208,7 +212,7 @@ public class Plugin : BaseUnityPlugin
         IsOptional(syncPath)
         || syncPath.enforced
         || Builtins.IsBuiltinWirePath(syncPath.path)
-        // A locked mod must still show — the explainer is the whole point of it being there.
+        // A locked mod must still show - the explainer is the whole point of it being there.
         || IsUnsafeToRemove(syncPath);
 
     /// <summary>
@@ -216,25 +220,25 @@ public class Plugin : BaseUnityPlugin
     /// the menu stays informative without offering toggles that do nothing. ConfigurationManager
     /// calls this in place of the normal control.
     ///
-    /// The text deliberately omits the mod's name — ConfigurationManager already prints it in
+    /// The text deliberately omits the mod's name - ConfigurationManager already prints it in
     /// the left-hand column, so repeating it just reads as a stutter.
     /// </summary>
     private static Action<ConfigEntryBase> InfoOnlyDrawer(SyncPath syncPath)
     {
         string text;
         if (IsUnsafeToRemove(syncPath))
-            text = "Wasn't installed by ModSync and can't be removed safely — see the wiki for more info.";
+            text = "Wasn't installed by ModSync and can't be removed safely - see the wiki for more info.";
         else if (syncPath.enforced)
-            text = "Enforced by the server — always installed.";
+            text = "Enforced by the server - always installed.";
         else
-            text = "Installed by default — opt out via ModSync_Data/Exclusions.jsonc.";
+            text = "Installed by default - opt out via ModSync_Data/Exclusions.jsonc.";
 
         return _ => GUILayout.Label(text, GUILayout.ExpandWidth(true));
     }
 
     // Players pick opt-in mods via the F12 toggles. A headless has no F12 and is driven purely
     // by the server-side recipe (headlessIncludes / headlessManagedIncludes / enforced /
-    // exclusions), so it ignores the toggles entirely and syncs every configured path — the
+    // exclusions), so it ignores the toggles entirely and syncs every configured path - the
     // server does the filtering. This keeps headlessIncludes authoritative instead of being
     // silently overridden by a toggle the headless can't reach.
     private List<SyncPath> EnabledSyncPaths =>
@@ -244,7 +248,7 @@ public class Plugin : BaseUnityPlugin
         selfUpdatePending
         ? syncPaths.Where(sp => Builtins.IsBuiltinWirePath(sp.path)).ToList()
         : IsHeadless
-            // `headless:false` is the one thing a headless still honours — it's how an admin
+            // `headless:false` is the one thing a headless still honours - it's how an admin
             // marks a mod player-only (GPU-specific, UI-only, …). The server already omits
             // these from a headless response; filtering here too keeps the client from asking
             // for something it will never be given.
@@ -254,12 +258,12 @@ public class Plugin : BaseUnityPlugin
     /// <summary>
     /// Opt-in paths the player has UN-checked that ModSync previously installed (they have a
     /// PreviousSync entry). These get compared with an empty remote so their ModSync-installed
-    /// files are UNINSTALLED — the toggle acts as a real install/remove switch. A path never
+    /// files are UNINSTALLED - the toggle acts as a real install/remove switch. A path never
     /// synced by ModSync isn't here (not in PreviousSync), so hand-installed mods are left alone.
     /// Headless has no toggles, so nothing is "deselected" there.
     /// </summary>
     private List<SyncPath> DeselectedSyncPaths =>
-        // Never uninstall anything during a self-update run — that decision belongs to the
+        // Never uninstall anything during a self-update run - that decision belongs to the
         // NEW plugin, on the next launch, with the current safety checks in place.
         selfUpdatePending || IsHeadless
             ? []
@@ -476,7 +480,7 @@ public class Plugin : BaseUnityPlugin
     private void WriteModSyncData()
     {
         // PreviousSync records what the server last offered, and it's the ONLY thing that
-        // licenses a removal — no entry for a path means nothing under it can be removed.
+        // licenses a removal - no entry for a path means nothing under it can be removed.
         //
         // A self-update run only ever sees ModSync's own components, so writing remoteModFiles
         // wholesale would erase every other path's record and leave the next launch unable to
@@ -494,11 +498,11 @@ public class Plugin : BaseUnityPlugin
     {
         if (IsHeadless)
         {
-            // Plugin DLLs are already loaded into memory by the time this runs — attempting
+            // Plugin DLLs are already loaded into memory by the time this runs - attempting
             // File.Copy(overwrite:true) throws IOException("File has a user-mapped section").
             // Corter-ModSync-Prepatch (BepInEx/patchers/) applies PendingUpdates at preloader
             // stage on the next boot, before any DLLs are locked, so just quit here.
-            Logger.LogInfo("ModSync: headless — update staged, restarting for patcher to apply.");
+            Logger.LogInfo("ModSync: headless - update staged, restarting for patcher to apply.");
             Application.Quit();
             return;
         }
@@ -542,7 +546,7 @@ public class Plugin : BaseUnityPlugin
             if (selfUpdatePending)
                 Logger.LogWarning(
                     $"ModSync server version ({version}) does not match this plugin ({Info.Metadata.Version}). "
-                    + "Updating ModSync itself first — mods will sync on the next launch.");
+                    + "Updating ModSync itself first - mods will sync on the next launch.");
         }
         catch (Exception e)
         {
@@ -606,7 +610,7 @@ public class Plugin : BaseUnityPlugin
                         // Seed the toggle DEFAULT from the installed state: an opt-in mod the
                         // player already has defaults to CHECKED (kept, not flagged for removal);
                         // one they don't have defaults to unchecked. `enabled:true` paths stay on.
-                        // Only the FIRST bind uses this default — the saved value wins afterwards.
+                        // Only the FIRST bind uses this default - the saved value wins afterwards.
                         syncPath.enabled || (!IsHeadless && IsInstalledLocally(syncPath.path)),
                         new ConfigDescription(
                             $"Should the mod attempt to sync files from {syncPath.path.Replace("\\", "/")}",
@@ -616,7 +620,7 @@ public class Plugin : BaseUnityPlugin
                                 // Opt-in mods, enforced paths and ModSync's own components are
                                 // shown (see IsVisibleInMenu); the catch-alls are not. Of those
                                 // shown, only opt-in paths are an actual choice, so they keep a
-                                // real checkbox — the rest are drawn as a one-line explainer
+                                // real checkbox - the rest are drawn as a one-line explainer
                                 // with no control, rather than a dead checkbox to click at.
                                 Browsable = IsVisibleInMenu(syncPath),
                                 ReadOnly = !IsOptional(syncPath),
@@ -650,7 +654,7 @@ public class Plugin : BaseUnityPlugin
             yield break;
         }
 
-        // Per-install denylist — paths/globs the user (or admin, on a headless instance)
+        // Per-install denylist - paths/globs the user (or admin, on a headless instance)
         // doesn't want ModSync to install or keep installed on this machine. Same file
         // and semantics for both player and headless. See EXCLUSIONS_SEED_TEMPLATE for
         // the in-file explanation written to the seed.
@@ -712,7 +716,7 @@ public class Plugin : BaseUnityPlugin
         // file is pure dead weight there. Drop it unconditionally: excluding it keeps the next
         // sync from pulling it back (it's non-enforced for headless, see ResolveEnforced), and
         // the direct delete covers a FRESH install where the exe shipped in the zip and was
-        // never tracked in PreviousSync — the removal path alone would never touch it. Nothing
+        // never tracked in PreviousSync - the removal path alone would never touch it. Nothing
         // loads the exe on headless, so it's never locked.
         if (IsHeadless)
         {
@@ -722,7 +726,7 @@ public class Plugin : BaseUnityPlugin
                 if (File.Exists(UPDATER_PATH))
                 {
                     File.Delete(UPDATER_PATH);
-                    Logger.LogInfo("ModSync: headless — removed unused ModSync.Updater.exe.");
+                    Logger.LogInfo("ModSync: headless - removed unused ModSync.Updater.exe.");
                 }
             }
             catch (Exception e)
@@ -786,7 +790,7 @@ public class Plugin : BaseUnityPlugin
         }
         catch (Exception e)
         {
-            Logger.LogError($"ModSync: HashLocalFiles threw — {e.GetType().Name}: {e.Message}");
+            Logger.LogError($"ModSync: HashLocalFiles threw - {e.GetType().Name}: {e.Message}");
             Logger.LogError(e.ToString());
             Chainloader.DependencyErrors.Add(
                 $"Could not load {Info.Metadata.Name} due to error hashing local files. Please check BepInEx/LogOutput.log."
@@ -809,7 +813,7 @@ public class Plugin : BaseUnityPlugin
                     (syncPath) =>
                     {
                         // Deselected paths were NOT requested from the server (only EnabledSyncPaths
-                        // is), so they get an empty remote — that's what makes GetRemovedFiles
+                        // is), so they get an empty remote - that's what makes GetRemovedFiles
                         // uninstall the files ModSync previously installed for them.
                         if (!remoteHashes.TryGetValue(syncPath.path, out var remotePathHashes))
                             return new KeyValuePair<string, Dictionary<string, ModFile>>(
@@ -874,7 +878,7 @@ public class Plugin : BaseUnityPlugin
     }
 
     // These three drive what the update window DRAWS, so they must span the same set the diff
-    // ran over (ProcessedSyncPaths) — not just the enabled set. A deselected path only ever
+    // ran over (ProcessedSyncPaths) - not just the enabled set. A deselected path only ever
     // contributes REMOVED lines, but if we listed it over EnabledSyncPaths its removals would
     // count towards UpdateCount (opening the window) while rendering nothing: an empty prompt.
     private List<string> _optional;

@@ -3,7 +3,7 @@ using ModSync.Utility;
 namespace ModSync.Server.Test;
 
 /// <summary>
-/// Tests for ModSyncHttpListener.BuildPathsResponse — the /modsync/paths payload.
+/// Tests for ModSyncHttpListener.BuildPathsResponse - the /modsync/paths payload.
 ///
 /// These exist because of a real shipped-then-caught bug: /modsync/paths advertised
 /// `headless:false` paths that /modsync/hashes then refused to serve. A client dutifully
@@ -92,7 +92,7 @@ public class PathsResponseTests
         var servedKeys = served.Keys.Select(PathExt.ToWirePath).ToList();
 
         Assert.That(advertised, Is.SubsetOf(servedKeys),
-            "/modsync/paths advertised a path that /modsync/hashes will not serve — "
+            "/modsync/paths advertised a path that /modsync/hashes will not serve - "
             + "clients <=0.12.5 index the hashes dictionary directly and will throw KeyNotFoundException");
     }
 
@@ -101,8 +101,8 @@ public class PathsResponseTests
     [Test]
     public void VersionMismatch_ServesOnlyModSyncsOwnComponents()
     {
-        // A pre-0.12.6 client sends no version at all. It builds its ENTIRE diff — including
-        // removals — from the paths we hand it, so handing it only builtins makes it
+        // A pre-0.12.6 client sends no version at all. It builds its ENTIRE diff - including
+        // removals - from the paths we hand it, so handing it only builtins makes it
         // structurally incapable of proposing to delete a mod it doesn't understand.
         var syncPaths = new List<SyncPath>
         {
@@ -121,7 +121,7 @@ public class PathsResponseTests
         {
             Assert.That(served, Has.Count.EqualTo(3), "only ModSync's own components may be served");
             Assert.That(paths, Has.None.Contains("DynamicMaps"),
-                "an out-of-date client must never be told about an opt-in mod — it would offer to delete it");
+                "an out-of-date client must never be told about an opt-in mod - it would offer to delete it");
             Assert.That(paths, Has.None.EqualTo(@"BepInEx\plugins"),
                 "nor about the catch-all");
             foreach (var builtin in Builtins.All)
@@ -190,6 +190,25 @@ public class PathsResponseTests
         var dto = ModSyncHttpListener.BuildPathsResponse([new SyncPath("../BepInEx/plugins")], isHeadless: false).Single();
 
         Assert.That(dto.baseFiles, Is.Not.Null.And.Empty);
+    }
+
+    [Test]
+    public void Optional_ReachesTheClient()
+    {
+        // `optional` only ever does anything in the client's F12 menu, so it has to survive the
+        // wire. If it silently didn't, an admin's opt-out mod would just look like every other
+        // enabled path: synced, and invisible in the menu.
+        var optOut = new SyncPath("user/mods", name: "Server mods", optional: true);
+        var ordinary = new SyncPath("../BepInEx/plugins");
+
+        var dtos = ModSyncHttpListener.BuildPathsResponse([optOut, ordinary], isHeadless: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dtos[0].optional, Is.True);
+            Assert.That(dtos[0].enabled, Is.True, "optional is independent of enabled");
+            Assert.That(dtos[1].optional, Is.False, "a plain path must stay out of the menu");
+        });
     }
 
     [Test]

@@ -588,8 +588,8 @@ public class HashLocalFilesTests
     public void TestHashLocalFiles_DisabledOverride_CarvesOutOfCatchAll()
     {
         // Catch-all "plugins" (active) + "plugins/OtherMod" as a disabled (opt-out) override.
-        // OtherMod's files must be claimed by the override — so they're NOT in the catch-all's
-        // local set — and the override itself isn't returned. This stops an opt-out mod sitting
+        // OtherMod's files must be claimed by the override - so they're NOT in the catch-all's
+        // local set - and the override itself isn't returned. This stops an opt-out mod sitting
         // inside a catch-all from being flagged for add/remove.
         //
         // Self-contained real dir tree (Path.Combine, not backslash literals) so it runs on
@@ -681,7 +681,7 @@ public class HashLocalFilesTests
     public void TestHashLocalFiles_BaseFiles_InactivePathNotReturned()
     {
         // Opted out: neither the mod's folder nor its baseFile may appear in the local set,
-        // or the diff would flag them for removal — which for a base-game file is exactly the
+        // or the diff would flag them for removal - which for a base-game file is exactly the
         // destructive outcome the whole baseFiles/.modsync-bak design exists to prevent.
         var dir = TestUtils.GetTemporaryDirectory();
         try
@@ -714,7 +714,7 @@ public class HashLocalFilesTests
     public void TestHashLocalFiles_BaseFile_MissingOnDisk_IsSkipped()
     {
         // A player who never installed the mod has no replaced base file. That must hash
-        // cleanly rather than throwing — it's the normal state for most of the playerbase.
+        // cleanly rather than throwing - it's the normal state for most of the playerbase.
         var dir = TestUtils.GetTemporaryDirectory();
         try
         {

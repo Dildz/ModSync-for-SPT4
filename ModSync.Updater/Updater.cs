@@ -11,9 +11,9 @@ public static class Updater
     /// <summary>
     /// Folders holding BASE-GAME files that mods replace rather than add to. Files here get
     /// backed up to .modsync-bak before being overwritten, and restored (never deleted) on
-    /// removal — losing one of these bricks the client.
-    ///   • Managed/          — Unity assemblies (DynamicMaps replaces two of them)
-    ///   • Plugins/x86_64/   — native Unity plugins (Tarkov DLSS 4.5 replaces nvngx_dlss.dll)
+    /// removal - losing one of these bricks the client.
+    ///   • Managed/          - Unity assemblies (DynamicMaps replaces two of them)
+    ///   • Plugins/x86_64/   - native Unity plugins (Tarkov DLSS 4.5 replaces nvngx_dlss.dll)
     /// </summary>
     private static bool IsInProtectedBaseFolder(string path)
     {
@@ -84,7 +84,7 @@ public static class Updater
             {
                 // A file here is only ever a REPLACEMENT for a base-game one, and we back the
                 // original up at install time. So a backup means "restore what was here
-                // before"; NO backup means we never installed this and it is base-game —
+                // before"; NO backup means we never installed this and it is base-game -
                 // deleting it would brick the install. Leave it.
                 if (!File.Exists(bakPath))
                 {

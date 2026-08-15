@@ -24,7 +24,7 @@ public static partial class Glob
     {
         // Globs from the server arrive in wire format using backslashes (e.g.
         // "BepInEx\plugins\Fika"). When we feed that straight into Regex, the
-        // engine reads sequences like "\F" as escape codes — most are invalid
+        // engine reads sequences like "\F" as escape codes - most are invalid
         // and throw at compile time ("Unrecognized escape sequence \F").
         // A few (\s, \p) are valid but mean the wrong thing.
         // We escape every literal backslash up front so the regex engine treats

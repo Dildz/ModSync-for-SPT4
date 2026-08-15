@@ -6,7 +6,7 @@ namespace ModSync.Server;
 
 /// <summary>
 /// File walker + hasher. Each call to <see cref="HashModFilesAsync"/> walks every enabled
-/// syncpath fresh and re-hashes every file from scratch — no timestamp/size shortcuts.
+/// syncpath fresh and re-hashes every file from scratch - no timestamp/size shortcuts.
 ///
 /// Why no shortcuts: hash-on-change-only schemes (NarcoNet's approach) silently miss
 /// modifications when timestamps are stripped or files are saved in-place with the same
@@ -14,7 +14,7 @@ namespace ModSync.Server;
 /// sampled-hash strategy in <see cref="ImoHash"/> keeps the cost low (samples three 32KB
 /// chunks for files &gt;10MB instead of hashing the whole thing).
 ///
-/// Not an [Injectable] class — constructed manually by the HTTP listener after Config has
+/// Not an [Injectable] class - constructed manually by the HTTP listener after Config has
 /// loaded. Pattern matches corter's TS where SyncUtil is created per-request with the
 /// loaded config.
 ///
@@ -33,7 +33,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 
     /// <summary>
     /// Heuristic: is this syncpath under BepInEx/plugins? Used to scope the headless
-    /// allowlist — only plugins-area files get the allowlist gate. Handles both
+    /// allowlist - only plugins-area files get the allowlist gate. Handles both
     /// the direct path <c>../BepInEx/plugins</c> and any deeper sub-path under it.
     /// Comparison is on the unix-normalized form so backslashes don't trip it up.
     /// </summary>
@@ -58,7 +58,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     /// <summary>
     /// Recursive directory walk. Yields the path of every file we'd consider syncing,
     /// applying the configured exclusions as we go. Also yields any empty directory's
-    /// own path — clients need to recreate empty dirs on their side, so we represent
+    /// own path - clients need to recreate empty dirs on their side, so we represent
     /// them as path entries with an empty hash and <c>directory=true</c> in the final
     /// ModFile.
     ///
@@ -71,9 +71,9 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     public IEnumerable<string> GetFilesInDir(string dir, bool skipExclusions = false)
     {
         // Three early-exit cases, in order:
-        //   1) Path doesn't exist at all (likely a stale syncpath) — warn and skip.
+        //   1) Path doesn't exist at all (likely a stale syncpath) - warn and skip.
         //   2) Path points at a single file (e.g. our built-in ../ModSync.Updater.exe).
-        //   3) Path points at a directory — fall through to the walk.
+        //   3) Path points at a directory - fall through to the walk.
         if (!File.Exists(dir) && !Directory.Exists(dir))
         {
             logger.Warning($"Corter-ModSync: syncpath '{dir}' does not exist, will be ignored.");
@@ -89,7 +89,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 
         var hasContents = false;
 
-        // Files in this directory (non-recursive). EnumerateFiles is lazy — pulls one
+        // Files in this directory (non-recursive). EnumerateFiles is lazy - pulls one
         // entry from the OS at a time, doesn't materialize the full list.
         foreach (var file in Directory.EnumerateFiles(dir))
         {
@@ -98,7 +98,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
             hasContents = true;
         }
 
-        // Subdirectories — recurse into each.
+        // Subdirectories - recurse into each.
         foreach (var subDir in Directory.EnumerateDirectories(dir))
         {
             if (!skipExclusions && config.IsExcluded(subDir)) continue;
@@ -119,12 +119,12 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     }
 
     /// <summary>
-    /// Build a ModFile for a single path — empty hash if it's a directory, sampled
+    /// Build a ModFile for a single path - empty hash if it's a directory, sampled
     /// MetroHash128 if it's a file.
     ///
     /// Retries on IOException up to <see cref="MaxIORetries"/> times with a small delay.
     /// Most common cause on Windows is another process holding the file open with
-    /// exclusive access (ERROR_SHARING_VIOLATION, HResult 0x80070020) — happens with
+    /// exclusive access (ERROR_SHARING_VIOLATION, HResult 0x80070020) - happens with
     /// log files, locked configs, etc. Linux is generally less prone to this.
     /// </summary>
     public async Task<ModFile> BuildModFileAsync(string file)
@@ -154,14 +154,14 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     /// /modsync/hashes route serializes to JSON: outer key = syncpath, inner key = file
     /// path under that syncpath, value = ModFile.
     ///
-    /// Paths in the response use Windows separators (backslashes) — the BepInEx client
+    /// Paths in the response use Windows separators (backslashes) - the BepInEx client
     /// expects this even on a Linux server. Normalization happens at this boundary so the
     /// rest of the code can stay separator-agnostic.
     ///
     /// Files seen across multiple syncpaths only get hashed once (the first time we
     /// encounter them). Matches corter's dedup-by-set behavior in sync.ts.
     ///
-    /// <paramref name="isHeadless"/> — when true, the headlessIncludes allowlist is the
+    /// <paramref name="isHeadless"/> - when true, the headlessIncludes allowlist is the
     /// sole gate for BepInEx/plugins: exclusions are bypassed so that files excluded from
     /// players (e.g. Fika.Headless.dll) can still reach headless via the allowlist.
     /// Files in patchers/config (and any non-plugins syncpath) are still filtered by the
@@ -174,7 +174,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         Func<SyncPath, bool>? isActive = null)
     {
         // Ownership (which syncpath claims a file) is computed over EVERY path passed in,
-        // even inactive ones — so a disabled/opt-out override still carves its files out of
+        // even inactive ones - so a disabled/opt-out override still carves its files out of
         // an enclosing catch-all. Only ACTIVE paths (enabled/enforced/requested) are hashed
         // and returned. Default: everything active.
         isActive ??= _ => true;
@@ -195,16 +195,28 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
             // its files for ownership, it just never serves them. Skipping the path entirely
             // would leave its files unclaimed, and an enclosing catch-all (../BepInEx/patchers
             // for a prepatcher-based mod) would then walk over and serve them to the headless
-            // anyway — the exact leak the ownership-claiming design exists to prevent.
+            // anyway - the exact leak the ownership-claiming design exists to prevent.
             var active = isActive(syncPath) && !(isHeadless && !syncPath.headless);
             var perPath = new Dictionary<string, ModFile>();
+
+            // A tombstone is a retired syncpath whose files are already gone from the server. It
+            // is advertised with an empty list on purpose: that is what makes the client uninstall
+            // its own copy (previous ∩ local − remote). Skip the walk entirely - there is nothing
+            // to find, and GetFilesInDir would log "does not exist, will be ignored", which is the
+            // opposite of what we're doing with it.
+            if (config.IsTombstone(syncPath.path))
+            {
+                if (active)
+                    result[PathExt.WinPath(syncPath.path)] = perPath;
+                continue;
+            }
 
             // Decide once per syncpath which allowlist gates apply.
             // Enforced paths bypass the headless plugins gate so ModSync itself can always self-update.
             var applyHeadlessPluginsAllowlist = isHeadless && !syncPath.enforced && IsPluginsScoped(syncPath.path);
             var applyManagedAllowlist = IsManagedScoped(syncPath.path);
 
-            // For headless+plugins: skip exclusions in the walk — headlessIncludes is the
+            // For headless+plugins: skip exclusions in the walk - headlessIncludes is the
             // sole gate and is designed to override exclusions (e.g. Fika.Headless.dll is
             // in exclusions to block players, but headlessIncludes lets it reach headless).
             foreach (var file in GetFilesInDir(syncPath.path, skipExclusions: applyHeadlessPluginsAllowlist))
@@ -213,21 +225,21 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
                 if (!seen.Add(winFile)) continue; // claim ownership across ALL paths, active or not
 
                 // Inactive path (opt-out override, or one the client didn't request): its files
-                // are now claimed — so an enclosing catch-all can't re-serve them — but we never
+                // are now claimed - so an enclosing catch-all can't re-serve them - but we never
                 // hash or return them ourselves. This is what makes an optional path toggled off
                 // actually opt out, even when it sits inside a catch-all.
                 if (!active) continue;
 
-                // Headless+plugins: headlessIncludes is the sole filter — exclusions are
+                // Headless+plugins: headlessIncludes is the sole filter - exclusions are
                 // intentionally bypassed above so that files like Fika.Headless.dll can be
                 // excluded from players yet still reach headless via the allowlist.
-                // Empty allowlist means zero plugins reach headless — intentional "fail closed".
+                // Empty allowlist means zero plugins reach headless - intentional "fail closed".
                 if (applyHeadlessPluginsAllowlist && !config.IsHeadlessAllowed(file)) continue;
 
                 // Managed folder: only serve filenames explicitly listed in managedIncludes
                 // (or headlessManagedIncludes for headless). Works by filename only so it's
                 // identical on Docker (staging folder, 2 files) and Windows (full Managed
-                // folder, 169 files) — the allowlist is what keeps vanilla DLLs out.
+                // folder, 169 files) - the allowlist is what keeps vanilla DLLs out.
                 if (applyManagedAllowlist)
                 {
                     var fileName = Path.GetFileName(file);
@@ -244,7 +256,7 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 
             // baseFiles: base-game files this mod REPLACES, living outside its own folder.
             // They ride the syncpath's active state, so a player who opted out never receives
-            // them — that's the whole point of binding them to the mod rather than to a
+            // them - that's the whole point of binding them to the mod rather than to a
             // separate always-on allowlist (the flaw that made DynamicMaps a special case).
             // Claimed for ownership even when inactive, so an enclosing Managed/plugins
             // catch-all can't re-serve them behind the opt-out's back.
@@ -301,11 +313,11 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
             // (e.g. ../BepInEx/patchers/TarkovDLSS45 declaring nvngx_dlss.dll over in
             // EscapeFromTarkov_Data/Plugins/x86_64), so they can never satisfy the containment
             // check above. Without this they get offered in the hash list and then refused on
-            // download — the client retries forever and the mod never installs.
+            // download - the client retries forever and the mod never installs.
             //
             // EXACT full-path match only: these are admin-declared in config, never derived
             // from the request, so this widens the allowlist by precisely the files the server
-            // already chose to serve — no traversal surface.
+            // already chose to serve - no traversal surface.
             foreach (var baseFile in sp.baseFiles)
             {
                 if (Path.GetFullPath(Path.Combine(serverRoot, baseFile)) == requested)
