@@ -110,6 +110,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: "Corter-ModSync-${{ github.ref_name }}.zip"
+          # Title carries the SPT line, so the two supported branches are told apart at a
+          # glance on the releases page (the 4.1 line publishes "(SPT 4.1.x)" the same way).
+          name: "Corter ModSync ${{ github.ref_name }} (SPT 4.0.x)"
           # Tags containing "-pre" (e.g. v0.11.1-pre1) are marked as pre-release on
           # GitHub - they don't show up in the "Latest" link, and users get a warning.
           prerelease: ${{ contains(github.ref_name, '-pre') || contains(github.ref_name, '-rc') }}
@@ -119,6 +122,12 @@ jobs:
           # This text is baked into every release page verbatim - a stale body means the
           # release ships with the PREVIOUS version's changelog (happened on v0.12.4).
           body: |
+            ## Requires SPT 4.0.x
+
+            Built against **SPT 4.0.13** and declared as `~4.0.0`, so it loads on any 4.0.x. It will not load on SPT 4.1.x: the server checks which `SPTarkov.Server.Core` a mod was compiled against and refuses to load it on a mismatch.
+
+            **On SPT 4.1.x?** Use [v0.13.0](https://github.com/Dildz/ModSync-for-SPT4/releases/tag/v0.13.0) instead. Both lines are maintained.
+
             **Pre-release.** Two changes worth testing before this goes out as v0.12.7. Both are server-side config features; nothing changes unless you edit `config.jsonc`.
 
             ## Changes
