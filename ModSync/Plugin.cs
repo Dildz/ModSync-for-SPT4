@@ -22,7 +22,7 @@ namespace ModSync;
 using SyncPathFileList = Dictionary<string, List<string>>;
 using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 
-[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.6")]
+[BepInPlugin("corter.modsync", "Corter ModSync", "0.12.7")]
 public class Plugin : BaseUnityPlugin
 {
     private static readonly string MODSYNC_DIR = Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data");
@@ -48,7 +48,7 @@ public class Plugin : BaseUnityPlugin
     /// the server's config with matching code.
     ///
     /// Why this matters: an outdated plugin cannot be trusted to interpret a newer server's
-    /// config. v0.12.6 added opt-in carve-outs and baseFiles, and a v0.12.5 client reading that
+    /// config. v0.12.7 added opt-in carve-outs and baseFiles, and a v0.12.5 client reading that
     /// config concluded a mod it should have left alone had been deleted server-side - and
     /// offered to remove it, with none of the safety checks that shipped alongside the feature.
     /// Upstream only logged a warning here and carried on; this makes the warning mean something.

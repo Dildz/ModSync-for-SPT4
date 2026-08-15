@@ -119,27 +119,27 @@ jobs:
           # This text is baked into every release page verbatim - a stale body means the
           # release ships with the PREVIOUS version's changelog (happened on v0.12.4).
           body: |
+            **Pre-release.** Two changes worth testing before this goes out as v0.12.7. Both are server-side config features; nothing changes unless you edit `config.jsonc`.
+
             ## Changes
 
-            - **New: `baseFiles` - sync mods that replace base-game files.** A syncPath can now list base-game files the mod overwrites (e.g. DLSS's `nvngx_dlss.dll`, DynamicMaps' Unity assemblies). ModSync backs the original up as `.modsync-bak` before replacing it and restores it when the mod is removed, so opting out puts the game back exactly as it was. This replaces the hardcoded DynamicMaps handling with a general mechanism any mod can use.
-            - **New: `headless` per syncPath** - set `"headless": false` and that path is never offered to a headless client. Useful for anything graphical (DLSS, map overlays), which a headless renders nothing for and simply wastes disk and bandwidth on.
-            - **New: ModSync updates itself first, then restarts.** When the client's version doesn't match the server's, the server serves only ModSync's own components until the client is current. This removes a class of failures where an out-of-date client tried to interpret a newer server's response.
-            - **New: `config_default.jsonc`** - the server writes the current shipped defaults alongside your config on every boot, so you can diff new options in without your own file ever being touched.
-            - **New: notification for missing config options** - if a release adds a top-level option your config lacks, the server logs it once at startup. It never rewrites your file.
-            - **Rework: the F12 menu.** Optional mods get a real checkbox that installs and uninstalls them. Enforced and built-in paths are now *shown* rather than hidden - as a one-line explanation with no control, so you can see what the server manages without being able to break it. The three catch-all paths are hidden entirely.
-            - **The zip no longer ships `config.jsonc`.** The server writes it on first boot if missing, so extracting over an existing install can no longer clobber your config.
+            - **New: `optional` per syncPath.** Set `"optional": true` and the client gets a working checkbox for that path in the F12 menu, starting in whatever state `enabled` gives it. Until now the only path a player could tick or untick was an opt-IN one (`"enabled": false`); this adds the other half, a mod that is **synced by default but can still be refused**. Unticking uninstalls what ModSync installed there.
+              Do not put it on the three catch-alls (`../BepInEx/plugins`, `patchers`, `config`) - they carry the mods your players need to connect, so one untick would strip the modset.
+            - **New: removing a mod from your config now removes it from clients.** Delete a mod's files from the server *and* delete its `syncPaths` entry, and every client uninstalls its copy on the next sync, with the usual prompt. Previously the entry disappearing meant clients never heard about it again and kept the mod permanently.
+              ModSync records what it served in `.modsync-served.json` next to `config.jsonc`, and keeps offering a removed entry as empty until you re-add it or clear that file. Deleting the entry but **keeping** the files still does the opposite, by design: the entry is what carves a mod out of the catch-alls, so without it they sync it to everyone.
 
             ## Upgrade notes
 
             Unzip into your game root as usual - clients update via sync, no manual steps.
 
-            Your existing `config.jsonc` is untouched: `baseFiles` and `headless` are optional and default to the previous behaviour. To use them, copy the examples from the regenerated `config_default.jsonc`.
+            Your existing `config.jsonc` is untouched and behaves exactly as before; `optional` defaults to false.
 
-            Upgrading leaves one dead entry, `(Builtin) Managed Files`, in each client's `BepInEx/config/corter.modsync.cfg`. It is unbound and does nothing; delete the line if it bothers you.
+            **If you already have an entry you expected players to be able to untick,** it needs `"optional": true` adding. An `"enabled": true` path has never been shown in the F12 menu, and still isn't without that option.
 
             ## Docs
 
-            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#mods-that-replace-base-game-files) - how `baseFiles` backs up and restores originals, and why a hand-installed mod gets locked
+            - [syncPaths options](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#options) - all eight, including `optional`
+            - [Retiring a mod](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#retiring-a-mod) - how removal reaches clients, and the keep-the-files trap
             - [Usage Examples](https://github.com/Dildz/ModSync-for-SPT4/wiki/UsageExamples) - worked `config.jsonc` setups, from minimal to a real server
 
             **Coming from before v0.12.4?** See the v0.12.4 notes for the one-time `BepInEx/patchers/Corter-ModSync/` folder cleanup on the server/headless.
