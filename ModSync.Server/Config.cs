@@ -22,7 +22,8 @@ public class Config(
     List<string> exclusions,
     List<string> headlessIncludes,
     List<string> managedIncludes,
-    List<string> headlessManagedIncludes)
+    List<string> headlessManagedIncludes,
+    List<string>? tombstones = null)
 {
     public readonly List<SyncPath> SyncPaths = syncPaths;
     public readonly List<string> Exclusions = exclusions;
@@ -48,6 +49,19 @@ public class Config(
 
     private readonly HashSet<string> _headlessManagedIncludesSet =
         new(headlessManagedIncludes, StringComparer.OrdinalIgnoreCase);
+
+    // Retired syncPaths, advertised with an empty file list so clients uninstall them.
+    // Their folders are gone from the server by definition, so the walk must be skipped
+    // rather than attempted - see IsTombstone.
+    private readonly HashSet<string> _tombstones =
+        new(tombstones ?? [], StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True if this syncpath is a tombstone: retired from config.jsonc, its files already gone
+    /// from the server, kept in the response only so clients remove their copies. Walking it
+    /// would log "does not exist, will be ignored", which is the opposite of what's happening.
+    /// </summary>
+    public bool IsTombstone(string path) => _tombstones.Contains(path);
 
 
     /// <summary>True if filePath matches any of the configured exclusion globs.</summary>
@@ -133,7 +147,6 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             // ┌─────────────────────────────────────────────────────────────────────┐
             // │  WIKI - FULL CONFIG GUIDE:                                          │
             // │  https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration       │
-            // │  Every option below is documented there with examples.              │
             // └─────────────────────────────────────────────────────────────────────┘
 
             // SPT 4 directory layout: server runs from <gameRoot>/SPT/.
@@ -141,20 +154,29 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             //
             // The `user/mods` folder is NOT a syncPath. Server mods stay server-only
             // by design - their client-facing components ship as separate BepInEx
-            // plugins, which DO sync via the paths below.
+            // plugins, which DO sync via the paths below. (One edge case can justify
+            // changing that; it's written up on the wiki, deliberately not here.)
             //
-            // Each path/entry can be configured as EITHER:
+            // Each path/entry is EITHER:
             //   1. A plain string  - sync this path with all defaults (what we use below).
-            //   2. An object       - same path, but override HOW it syncs. A plain string
-            //                        is just shorthand for an object with every option at
-            //                        its default.
+            //   2. An object       - the same path, with some of those defaults overridden.
             //
-            // The seven options:
+            // The eight options:
             //
             //     "path"            (required)        Folder or file to sync. Globs NOT allowed.
             //     "name"            (default: path)   Friendly label shown in the client's F12 sync menu.
-            //     "enabled"         (default: true)   true = opt-out (synced unless client unchecks it),
-            //                                         false = opt-in (client must check the box first).
+            //                                         Keep these unique - the client stores each F12
+            //                                         toggle under its name.
+            //     "enabled"         (default: true)   true = synced to everyone by default,
+            //                                         false = opt-in, the client ticks it in F12 first.
+            //                                         Whether the client can CHANGE that is decided by
+            //                                         "optional" and "enforced" below.
+            //     "optional"        (default: false)  true = the client gets a working F12 checkbox for
+            //                                         this path, starting in the "enabled" state. Use it
+            //                                         for a mod installed by default but still refusable
+            //                                         ("enabled": false is already a checkbox, so opt-in
+            //                                         mods don't need this). Unticking UNINSTALLS what
+            //                                         ModSync put there - never mark a catch-all optional.
             //     "enforced"        (default: false)  true = server wins, always. Client can't opt out,
             //                                         can't keep local edits, can't exclude it. Use for
             //                                         files every client MUST match (e.g. patchers).
@@ -175,12 +197,21 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             // Paths are matched MOST-SPECIFIC FIRST, so you can set defaults on a folder
             // and override just one child inside it (e.g. enforce a single config file).
             //
+            // RETIRING A MOD: delete its files from the server AND delete its entry here.
+            // ModSync remembers what it served (.modsync-served.json, next to this file) and
+            // keeps offering the removed entry as EMPTY, which is what tells a client to
+            // uninstall its copy - whenever it next connects, however long that takes.
+            // Re-adding the entry cancels it; otherwise clear the record file when you're done.
+            // Delete the entry but KEEP the files and the opposite happens, by design: the
+            // entry was carving the mod out of the catch-alls, so without it they take over
+            // and sync the mod to EVERYONE.
+            //
             // TWO WAYS TO USE THIS (it's one dial, not two modes - see the wiki):
             //   Lazy    - keep just the 3 catch-alls below; everything syncs and each
             //             player declines what they don't want via their own
             //             ModSync_Data/Exclusions.jsonc. Best for large modsets.
-            //   Curated - ALSO name mods as objects with "enabled": false; those appear
-            //             in the player's F12 menu as opt-IN toggles. Best for slim sets.
+            //   Curated - ALSO name mods as objects, using "enabled" / "optional" to put
+            //             them in the player's F12 menu as toggles. Best for slim sets.
             //   Mix     - name the few you want optional; the catch-alls cover the rest.
             "syncPaths": [
                 "../BepInEx/plugins",
@@ -207,6 +238,20 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
                 //     "enabled": false,
                 //     "restartRequired": false
                 // }
+                //
+                // Opt-OUT mod - synced by default, but the player can untick it in the F12
+                // menu, which uninstalls it. For a mod you want everyone on unless they
+                // actively say no:
+                //
+                // {
+                //     "path": "../BepInEx/plugins/SomeClientMod",
+                //     "name": "Optional: Some Client Mod",
+                //     "optional": true,
+                //     "restartRequired": false
+                // }
+                //
+                // Do NOT mark the three catch-alls above optional - they carry the mods
+                // your players need to connect, so one untick would strip the modset.
                 //
                 // ── Mods that REPLACE base-game files ──
                 // Some mods ship modified copies of files the game itself installs, rather
@@ -291,7 +336,12 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
 
                 // Git repo metadata - some mods are GitHub-only and may contain files
                 // that aren't needed at runtime.
-                "**/.git"
+                "**/.git",
+
+                // ModSync's own server-side bookkeeping (what it served last boot, used to
+                // retire removed mods). Only reachable at all if you sync "user/mods";
+                // there is no reason for a client to carry the server's record.
+                "**/.modsync-served.json"
             ],
 
             //-----------------------------------------------------------------------
@@ -355,7 +405,6 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             // Headless runs the game simulation without the rendering stack, so Managed
             // files are almost never needed there. Leave this empty unless a mod's install
             // instructions specifically say it is required on headless.
-            // Will probably always be empty, but the option is here for future use if needed.
             "headlessManagedIncludes": [
             ]
         }
@@ -370,6 +419,12 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
     };
+
+    /// <summary>
+    /// Options for the served-paths record. Indented on purpose - it's bookkeeping an admin may
+    /// want to read or clear by hand, not a wire format.
+    /// </summary>
+    private static readonly JsonSerializerOptions ServedRecordOptions = new() { WriteIndented = true };
 
     /// <summary>
     /// Resolve the mod's on-disk directory by inspecting where this assembly was loaded from.
@@ -410,7 +465,6 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         catch (Exception e)
         {
             // Reference-only - never block startup over it.
-            logger.LogWithColor($"Corter-ModSync: could not write config_default.jsonc: {e.Message}", Color.Grey);
         }
 
         var text = await File.ReadAllTextAsync(configPath);
@@ -447,7 +501,6 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         logger.LogWithColor(
             $"Corter-ModSync: your config.jsonc predates these options: {string.Join(", ", missing)}. "
             + "Defaults are in use - see config_default.jsonc alongside it for the documented versions.",
-            Color.Grey);
     }
 
     /// <summary>
@@ -566,6 +619,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
     private static SyncPath BuildSyncPath(JsonElement entry)
     {
         const bool defaultEnabled = true;
+        const bool defaultOptional = false;
         const bool defaultEnforced = false;
         const bool defaultSilent = false;
         const bool defaultRestartRequired = true;
@@ -592,6 +646,9 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
             enabled: entry.TryGetProperty("enabled", out var en) && en.ValueKind != JsonValueKind.Null
                 ? en.GetBoolean()
                 : defaultEnabled,
+            optional: entry.TryGetProperty("optional", out var op) && op.ValueKind != JsonValueKind.Null
+                ? op.GetBoolean()
+                : defaultOptional,
             enforced: entry.TryGetProperty("enforced", out var ef) && ef.ValueKind != JsonValueKind.Null
                 ? ef.GetBoolean()
                 : defaultEnforced,
@@ -690,12 +747,79 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
 
         var userPaths = raw.SyncPaths.ConvertAll(BuildSyncPath);
 
+        // `optional` asks for a client checkbox; `enforced` says the client gets no say.
+        // Enforcement wins, so the checkbox never appears - say why instead of leaving the
+        // admin to wonder. Advisory only: the pair is contradictory, not dangerous.
+        foreach (var sp in userPaths.Where(sp => sp.optional && sp.enforced))
+        {
+            logger.Warning(
+                $"Corter-ModSync: syncPath '{sp.name}' sets both 'optional' and 'enforced'. "
+                + "Enforced wins - it shows in the client's F12 menu as read-only, with no checkbox.");
+        }
+
+        var tombstones = ResolveTombstones(userPaths);
+
         // Concatenate, then sort by descending path length so more-specific matches take precedence.
-        var allPaths = new List<SyncPath>(builtins.Count + userPaths.Count);
+        // Tombstones join the sort like any other path - a retired entry must still out-rank the
+        // catch-all that encloses it, or the catch-all would claim its slot in the response.
+        var allPaths = new List<SyncPath>(builtins.Count + userPaths.Count + tombstones.Count);
         allPaths.AddRange(builtins);
         allPaths.AddRange(userPaths);
+        allPaths.AddRange(tombstones);
         allPaths.Sort((a, b) => b.path.Length.CompareTo(a.path.Length));
 
-        return new Config(allPaths, raw.Exclusions, raw.HeadlessIncludes, raw.ManagedIncludes, raw.HeadlessManagedIncludes);
+        return new Config(
+            allPaths,
+            raw.Exclusions,
+            raw.HeadlessIncludes,
+            raw.ManagedIncludes,
+            raw.HeadlessManagedIncludes,
+            tombstones.ConvertAll(sp => sp.path));
+    }
+
+    /// <summary>
+    /// Read the last-served record, work out which retired paths still need advertising as
+    /// tombstones, and write the record back. See <see cref="ServedPaths"/> for why this exists.
+    ///
+    /// Every failure path here returns NO tombstones. That's deliberate: a missing or corrupt
+    /// record must only ever cost us a removal, never cause one. Losing the file degrades this
+    /// to the behaviour ModSync had before tombstones existed.
+    /// </summary>
+    private List<SyncPath> ResolveTombstones(List<SyncPath> userPaths)
+    {
+        var recordPath = Path.Combine(GetModDirectory(), ServedPaths.FileName);
+
+        try
+        {
+            List<ServedPath> previous = [];
+            if (File.Exists(recordPath))
+                previous = JsonSerializer.Deserialize<List<ServedPath>>(File.ReadAllText(recordPath), ServedRecordOptions) ?? [];
+
+            var (tombstones, record) = ServedPaths.Resolve(
+                previous,
+                userPaths,
+                // syncPath paths are server-cwd-relative, the same form the walk uses.
+                path => File.Exists(path) || Directory.Exists(path),
+                DateTime.UtcNow);
+
+            File.WriteAllText(recordPath, JsonSerializer.Serialize(record, ServedRecordOptions));
+
+            if (tombstones.Count > 0)
+            {
+                logger.LogWithColor(
+                    $"Corter-ModSync: {tombstones.Count} retired syncPath(s) still advertised so clients can uninstall them: "
+                    + string.Join(", ", tombstones.Select(sp => sp.name)),
+                    Color.Grey);
+            }
+
+            return tombstones;
+        }
+        catch (Exception e)
+        {
+            logger.Warning(
+                $"Corter-ModSync: could not process {ServedPaths.FileName} ({e.Message}). "
+                + "Retired mods won't be auto-removed from clients this boot.");
+            return [];
+        }
     }
 }

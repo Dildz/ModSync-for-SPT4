@@ -151,12 +151,16 @@ public class Plugin : BaseUnityPlugin
         return Directory.Exists(full) && Directory.EnumerateFileSystemEntries(full).Any();
     }
     /// <summary>
-    /// An "optional" path is one the player genuinely chooses: opt-in (<c>enabled:false</c>)
-    /// and not enforced by the server. Only these get a working F12 checkbox - everything
-    /// else is shown for transparency but drawn as text (see <see cref="InfoOnlyDrawer"/>).
+    /// An "optional" path is one the player genuinely chooses, and only these get a working
+    /// F12 checkbox - everything else is shown for transparency but drawn as text (see
+    /// <see cref="InfoOnlyDrawer"/>). Two ways to be one:
+    ///   • <c>enabled:false</c> - opt-in, the toggle starts unticked
+    ///   • <c>optional:true</c> - the admin marked it player-choosable; <c>enabled</c> then
+    ///     only decides whether the toggle starts ticked
+    /// Either way the server has the final say: <c>enforced</c> paths are never a choice.
     /// </summary>
     private static bool IsOptional(SyncPath syncPath) =>
-        !syncPath.enabled
+        (syncPath.optional || !syncPath.enabled)
         && !syncPath.enforced;
 
     /// <summary>

@@ -199,6 +199,18 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
             var active = isActive(syncPath) && !(isHeadless && !syncPath.headless);
             var perPath = new Dictionary<string, ModFile>();
 
+            // A tombstone is a retired syncpath whose files are already gone from the server. It
+            // is advertised with an empty list on purpose: that is what makes the client uninstall
+            // its own copy (previous ∩ local − remote). Skip the walk entirely - there is nothing
+            // to find, and GetFilesInDir would log "does not exist, will be ignored", which is the
+            // opposite of what we're doing with it.
+            if (config.IsTombstone(syncPath.path))
+            {
+                if (active)
+                    result[PathExt.WinPath(syncPath.path)] = perPath;
+                continue;
+            }
+
             // Decide once per syncpath which allowlist gates apply.
             // Enforced paths bypass the headless plugins gate so ModSync itself can always self-update.
             var applyHeadlessPluginsAllowlist = isHeadless && !syncPath.enforced && IsPluginsScoped(syncPath.path);

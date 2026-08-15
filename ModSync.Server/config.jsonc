@@ -2,7 +2,6 @@
     // ┌─────────────────────────────────────────────────────────────────────┐
     // │  WIKI - FULL CONFIG GUIDE:                                          │
     // │  https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration       │
-    // │  Every option below is documented there with examples.              │
     // └─────────────────────────────────────────────────────────────────────┘
 
     // SPT 4 directory layout: server runs from <gameRoot>/SPT/.
@@ -10,20 +9,29 @@
     //
     // The `user/mods` folder is NOT a syncPath. Server mods stay server-only
     // by design - their client-facing components ship as separate BepInEx
-    // plugins, which DO sync via the paths below.
+    // plugins, which DO sync via the paths below. (One edge case can justify
+    // changing that; it's written up on the wiki, deliberately not here.)
     //
-    // Each path/entry can be configured as EITHER:
+    // Each path/entry is EITHER:
     //   1. A plain string  - sync this path with all defaults (what we use below).
-    //   2. An object       - same path, but override HOW it syncs. A plain string
-    //                        is just shorthand for an object with every option at
-    //                        its default.
+    //   2. An object       - the same path, with some of those defaults overridden.
     //
-    // The seven options:
+    // The eight options:
     //
     //     "path"            (required)        Folder or file to sync. Globs NOT allowed.
     //     "name"            (default: path)   Friendly label shown in the client's F12 sync menu.
-    //     "enabled"         (default: true)   true = opt-out (synced unless client unchecks it),
-    //                                         false = opt-in (client must check the box first).
+    //                                         Keep these unique - the client stores each F12
+    //                                         toggle under its name.
+    //     "enabled"         (default: true)   true = synced to everyone by default,
+    //                                         false = opt-in, the client ticks it in F12 first.
+    //                                         Whether the client can CHANGE that is decided by
+    //                                         "optional" and "enforced" below.
+    //     "optional"        (default: false)  true = the client gets a working F12 checkbox for
+    //                                         this path, starting in the "enabled" state. Use it
+    //                                         for a mod installed by default but still refusable
+    //                                         ("enabled": false is already a checkbox, so opt-in
+    //                                         mods don't need this). Unticking UNINSTALLS what
+    //                                         ModSync put there - never mark a catch-all optional.
     //     "enforced"        (default: false)  true = server wins, always. Client can't opt out,
     //                                         can't keep local edits, can't exclude it. Use for
     //                                         files every client MUST match (e.g. patchers).
@@ -44,12 +52,21 @@
     // Paths are matched MOST-SPECIFIC FIRST, so you can set defaults on a folder
     // and override just one child inside it (e.g. enforce a single config file).
     //
+    // RETIRING A MOD: delete its files from the server AND delete its entry here.
+    // ModSync remembers what it served (.modsync-served.json, next to this file) and
+    // keeps offering the removed entry as EMPTY, which is what tells a client to
+    // uninstall its copy - whenever it next connects, however long that takes.
+    // Re-adding the entry cancels it; otherwise clear the record file when you're done.
+    // Delete the entry but KEEP the files and the opposite happens, by design: the
+    // entry was carving the mod out of the catch-alls, so without it they take over
+    // and sync the mod to EVERYONE.
+    //
     // TWO WAYS TO USE THIS (it's one dial, not two modes - see the wiki):
     //   Lazy    - keep just the 3 catch-alls below; everything syncs and each
     //             player declines what they don't want via their own
     //             ModSync_Data/Exclusions.jsonc. Best for large modsets.
-    //   Curated - ALSO name mods as objects with "enabled": false; those appear
-    //             in the player's F12 menu as opt-IN toggles. Best for slim sets.
+    //   Curated - ALSO name mods as objects, using "enabled" / "optional" to put
+    //             them in the player's F12 menu as toggles. Best for slim sets.
     //   Mix     - name the few you want optional; the catch-alls cover the rest.
     "syncPaths": [
         "../BepInEx/plugins",
@@ -76,6 +93,20 @@
         //     "enabled": false,
         //     "restartRequired": false
         // }
+        //
+        // Opt-OUT mod - synced by default, but the player can untick it in the F12
+        // menu, which uninstalls it. For a mod you want everyone on unless they
+        // actively say no:
+        //
+        // {
+        //     "path": "../BepInEx/plugins/SomeClientMod",
+        //     "name": "Optional: Some Client Mod",
+        //     "optional": true,
+        //     "restartRequired": false
+        // }
+        //
+        // Do NOT mark the three catch-alls above optional - they carry the mods
+        // your players need to connect, so one untick would strip the modset.
         //
         // ── Mods that REPLACE base-game files ──
         // Some mods ship modified copies of files the game itself installs, rather
@@ -160,7 +191,12 @@
 
         // Git repo metadata - some mods are GitHub-only and may contain files
         // that aren't needed at runtime.
-        "**/.git"
+        "**/.git",
+
+        // ModSync's own server-side bookkeeping (what it served last boot, used to
+        // retire removed mods). Only reachable at all if you sync "user/mods";
+        // there is no reason for a client to carry the server's record.
+        "**/.modsync-served.json"
     ],
 
     //-----------------------------------------------------------------------
@@ -224,7 +260,6 @@
     // Headless runs the game simulation without the rendering stack, so Managed
     // files are almost never needed there. Leave this empty unless a mod's install
     // instructions specifically say it is required on headless.
-    // Will probably always be empty, but the option is here for future use if needed.
     "headlessManagedIncludes": [
     ]
 }

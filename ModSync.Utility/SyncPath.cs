@@ -12,6 +12,7 @@ public class SyncPath(
     string path,
     string name = "",
     bool enabled = true,
+    bool optional = false,
     bool enforced = false,
     bool silent = false,
     bool restartRequired = true,
@@ -23,6 +24,20 @@ public class SyncPath(
     public readonly string path = path;
     public readonly string name = string.IsNullOrEmpty(name) ? path : name;
     public readonly bool enabled = enabled;
+
+    /// <summary>
+    /// True = give the player a working checkbox for this path in the F12 menu, with
+    /// <see cref="enabled"/> as its default state. This is the only way to offer a path that
+    /// is synced BY DEFAULT but can still be turned off from the menu - `enabled:false`
+    /// already implies a toggle (opt-in, unticked), so it doesn't need this flag.
+    ///
+    /// Unticking UNINSTALLS what ModSync installed under the path, which is the point for a
+    /// folder of optional content but a disaster on one of the ../BepInEx catch-alls: those
+    /// carry the mods a player needs to connect, so one click would strip the modset. Hence
+    /// the default of false - the admin has to opt a path in, and can't fall into it.
+    /// </summary>
+    public readonly bool optional = optional;
+
     public readonly bool enforced = enforced;
     public readonly bool silent = silent;
     public readonly bool restartRequired = restartRequired;
