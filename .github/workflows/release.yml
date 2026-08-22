@@ -135,34 +135,41 @@ jobs:
           body: |
             ## Requires SPT 4.1.x
 
-            Built against **SPT 4.1.1** and declared as `~4.1.0`, so it loads on any 4.1.x - verified running on **4.1.2**. It will not load on SPT 4.0.x: the 4.1 server checks which `SPTarkov.Server.Core` a mod was compiled against and refuses to load it on a mismatch.
+            Built against **SPT 4.1.1** and declared as `~4.1.0`, so it loads on any 4.1.x - including **4.1.3**, which renamed the NuGet packages to `SPTushonka.*` but changed nothing ModSync uses. It will not load on SPT 4.0.x: the 4.1 server checks which `SPTarkov.Server.Core` a mod was compiled against and refuses to load it on a mismatch.
 
-            **Still on SPT 4.0.x?** Stay on [v0.12.6](https://github.com/Dildz/ModSync-for-SPT4/releases/tag/v0.12.6). That line is still supported on the `SPT4.0.x` branch - both versions get fixes.
+            **Still on SPT 4.0.x?** Use [v0.12.7](https://github.com/Dildz/ModSync-for-SPT4/releases/tag/v0.12.7). That line is still supported on the `SPT4.0.x` branch - both versions get the same features.
 
             ## Changes
 
-            - **SPT 4.1 support.** The server mod is ported to the 4.1 API: `IPreSptLoadModAsync` was removed (it's `IOnLoad` + `OnLoadAsync` now), `IHttpListener` changed shape, and log colours moved from `LogTextColor` to Spectre. No config changes are needed - your `config.jsonc` carries over as-is.
-            - **The server mod now installs to `SPT_Runtime/user/mods/`.** SPT 4.1 renamed its server folder from `SPT/` to `SPT_Runtime/`, and the zip follows. Extract into your game root exactly as before. Client-side paths (`BepInEx/`, the Updater at the game root) are unchanged.
-            - **Everything targets .NET 10 now, including `ModSync.Updater.exe`.** SPT 4.1 runs on .NET 10, and .NET doesn't roll forward across major versions - a .NET 9 Updater would simply refuse to start on a clean 4.1 install.
-            - **Fix: mods that ADD files outside their own folder are now uninstalled properly.** `baseFiles` assumed a mod always *replaces* a base-game file, so it treated "no `.modsync-bak`" as proof the file belonged to the game and refused to delete it. Mods that add a file instead of replacing one - DynamicMaps ships two Unity assemblies EFT doesn't have - left those files behind when removed, and their F12 entry locked itself so it couldn't be re-ticked either. Removal now keys off the backup alone: a `.modsync-bak` means restore the original, no backup means the mod added the file, so it's removed like anything else. Mods that genuinely replace a file (Tarkov DLSS's `nvngx_dlss.dll`) are unaffected - they still get a backup and still restore on opt-out.
+            This brings the 4.1 line level with v0.12.7 on the 4.0 line, plus one fix that only affects 4.1.
+
+            - **Fixed: paths inside the server folder were advertised as `SPT\...` on 4.1.** SPT 4.1 renamed its server folder to `SPT_Runtime/`, but ModSync still told clients that a syncPath like `user/mods` lived under `SPT\`. Nothing failed loudly - hashes matched and downloads worked - the files simply landed in `<gameRoot>/SPT/`, a folder 4.1 doesn't have. The folder name is now read from the server itself rather than hardcoded, so it is correct on both lines and survives any future rename.
+            - **New: `optional` per syncPath.** Set `"optional": true` and the client gets a working checkbox for that path in the F12 menu, starting in whatever state `enabled` gives it. Until now the only path a player could tick or untick was an opt-IN one (`"enabled": false`); this adds the other half, a mod that is **synced by default but can still be refused**. Unticking uninstalls what ModSync installed there.
+              Do not put it on the three catch-alls (`../BepInEx/plugins`, `patchers`, `config`) - they carry the mods your players need to connect, so one untick would strip the modset.
+            - **New: removing a mod from your config now removes it from clients.** Delete a mod's files from the server *and* delete its `syncPaths` entry, and every client uninstalls its copy on the next sync, with the usual prompt. Previously the entry disappearing meant clients never heard about it again and kept the mod permanently.
+              ModSync records what it served in `.modsync-served.json` next to `config.jsonc`, and keeps offering a removed entry as empty until you re-add it or clear that file. Deleting the entry but **keeping** the files still does the opposite, by design: the entry is what carves a mod out of the catch-alls, so without it they sync it to everyone.
+            - **Fixed: renaming a syncPath no longer resets your players' F12 choices.** Each client stored its toggles under the syncPath's `name`, so relabelling an entry made every player's setting for that mod revert to default and left a dead line in their config. Toggles are now stored under the `path` and merely *displayed* using the name. Each client carries its existing choices over on the first launch and tidies the old lines away; nobody has to do anything.
+              This mattered more once `optional` existed: a reset re-ticks an opt-out path, which would have silently reinstalled a mod the player had refused.
 
             ## Upgrade notes
 
             Unzip into your game root as usual - clients update themselves via sync, no manual steps.
 
-            Your `config.jsonc` is untouched and needs no changes for 4.1.
+            Your existing `config.jsonc` is untouched and behaves exactly as before; `optional` defaults to false.
 
-            If you ran 0.12.6 with a `baseFiles` entry for a mod that *adds* files (DynamicMaps), those files were left behind when the mod was removed. They're inert on their own, and 0.13.0 cleans them up the next time that mod is un-ticked.
+            **If you had a syncPath without a `../` prefix** (`user/mods` and the like), your players have a stray `<gameRoot>/SPT/` folder holding the old copy. ModSync now serves that path to the correct place and stops tracking the old one, so the leftovers are inert but will not be cleaned up automatically - delete that `SPT/` folder on each client once everyone has updated.
+
+            **If you already have an entry you expected players to be able to untick,** it needs `"optional": true` adding. An `"enabled": true` path has never been shown in the F12 menu, and still isn't without that option.
 
             ## Testing status
 
-            Run on a live **SPT 4.1.2** server with both a Fika headless and a real player client, syncing several mods end to end. Both test suites are green in CI as well.
+            The three features above were tested on the 4.0 line through the v0.12.7 pre-releases, on live servers with headless and player clients, before being ported here unchanged. Both test suites are green in CI.
 
-            That includes **DynamicMaps**, which is the mod the `baseFiles` fix above was written for: the case where a mod adds files EFT doesn't ship rather than replacing existing ones. Install, sync and removal all behaved as expected.
-
-            Not every configuration can be covered by one server, so if you hit something, please open an issue.
+            The `SPT_Runtime` path fix is new in this release and specific to 4.1. If you serve a syncPath that lives inside the server folder, that is the part worth watching - please open an issue if anything lands somewhere unexpected.
 
             ## Docs
 
-            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#mods-that-replace-base-game-files) - how `baseFiles` backs up and restores originals. Note the wiki documents the 4.0.x line; the removal behaviour described above is 4.1-only for now.
+            - [syncPaths options](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#options) - all eight, including `optional`
+            - [Retiring a mod](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#retiring-a-mod) - how removal reaches clients, and the keep-the-files trap
+            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#mods-that-replace-base-game-files) - how `baseFiles` backs up and restores originals
             - [Usage Examples](https://github.com/Dildz/ModSync-for-SPT4/wiki/UsageExamples) - worked `config.jsonc` setups, from minimal to a real server
