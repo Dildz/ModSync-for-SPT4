@@ -128,7 +128,7 @@ jobs:
 
             **On SPT 4.1.x?** Use [v0.13.0](https://github.com/Dildz/ModSync-for-SPT4/releases/tag/v0.13.0) instead. Both lines are maintained.
 
-            **Pre-release.** Three changes worth testing before this goes out as v0.12.7. The two config features do nothing until you edit `config.jsonc`; the third is a one-time tidy-up each client does to its own settings file.
+            Three changes, tested on live servers through the v0.12.7-pre builds. The two config features do nothing until you edit `config.jsonc`; the third is a one-time tidy-up each client does to its own settings file.
 
             ## Changes
 
