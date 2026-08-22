@@ -12,55 +12,38 @@ namespace ModSync.Server.Test;
 public class WebAuthTests
 {
     [Test]
-    public void GeneratedPasswordsSatisfyTheRuleTheUIEnforces()
+    public void SetupTokensAreDistinct()
     {
-        // The generated password has to pass the same bar an admin's chosen one does, or the very
-        // first password issued would be one the change-password form would reject.
-        for (var i = 0; i < 200; i++)
-        {
-            var password = WebAuthService.GeneratePassword();
-            Assert.That(WebAuthService.DescribePasswordProblem(password), Is.Null,
-                $"generated password '{password}' failed its own rule");
-        }
-    }
-
-    [Test]
-    public void GeneratedPasswordsAreNotAllTheSameShape()
-    {
-        // A shuffle bug that left the guaranteed characters in fixed positions would still pass the
-        // rule above while making every password start with an uppercase letter.
-        var firstCharClasses = new HashSet<string>();
-
-        for (var i = 0; i < 200; i++)
-        {
-            var c = WebAuthService.GeneratePassword()[0];
-            firstCharClasses.Add(char.IsUpper(c) ? "upper" : char.IsLower(c) ? "lower" : char.IsDigit(c) ? "digit" : "special");
-        }
-
-        Assert.That(firstCharClasses, Has.Count.GreaterThan(1),
-            "every generated password began with the same class of character - the shuffle is not shuffling");
-    }
-
-    [Test]
-    public void GeneratedPasswordsAreDistinct()
-    {
+        // If two servers could be issued the same code, the code would not be a secret.
         var seen = new HashSet<string>();
-        for (var i = 0; i < 200; i++) seen.Add(WebAuthService.GeneratePassword());
+        for (var i = 0; i < 500; i++) seen.Add(WebAuthService.GenerateSetupToken());
 
-        Assert.That(seen, Has.Count.EqualTo(200), "generated passwords repeated - the source is not random");
+        Assert.That(seen, Has.Count.EqualTo(500), "setup codes repeated - the source is not random");
     }
 
     [Test]
-    public void GeneratedPasswordsAvoidCharactersThatDoNotSurviveACopyPaste()
+    public void SetupTokensAreEasyToTranscribe()
     {
-        // This is read off a terminal and typed into a browser. Quotes, backslashes and spaces get
-        // mangled on the way; O/0 and I/l/1 get mistyped.
-        for (var i = 0; i < 200; i++)
+        // This is read off a terminal - often a Docker log in a browser tab - and typed into another
+        // browser tab by hand. Letters and digits only, and none of the glyphs people mistype.
+        for (var i = 0; i < 500; i++)
         {
-            Assert.That(WebAuthService.GeneratePassword(),
-                Does.Not.Match("[\"'\\\\ `O0Il1]"),
-                "generated password contains an ambiguous or shell-hostile character");
+            var token = WebAuthService.GenerateSetupToken();
+
+            Assert.That(token, Has.Length.EqualTo(12));
+            Assert.That(token, Does.Match("^[A-Za-z0-9]+$"), "setup code must be alphanumeric");
+            Assert.That(token, Does.Not.Match("[O0Il1]"), "setup code contains an ambiguous glyph");
         }
+    }
+
+    [Test]
+    public void SetupTokensUseMoreThanAHandfulOfCharacters()
+    {
+        // A generator stuck on a narrow slice of its alphabet would still pass the checks above.
+        var chars = new HashSet<char>();
+        for (var i = 0; i < 200; i++) chars.UnionWith(WebAuthService.GenerateSetupToken());
+
+        Assert.That(chars, Has.Count.GreaterThan(40), "the setup code alphabet is barely being used");
     }
 
     [TestCase("", "at least 8")]

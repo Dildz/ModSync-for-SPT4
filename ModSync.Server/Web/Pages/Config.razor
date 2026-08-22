@@ -49,12 +49,47 @@
             every player's machine.
         </MudText>
 
-        @if (!Auth.IsReady)
+        @if (Auth.NeedsSetup)
+        {
+            @* First run. The admin chooses the password, but the console code proves they can see
+               the server - without it, whoever reached this page first would own the editor, and
+               the editor decides what gets installed on every player's machine. *@
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+                No password has been set yet. The server console printed a <b>setup code</b> - use it
+                once here to choose your own password.
+            </MudAlert>
+
+            <MudForm>
+                <MudTextField @bind-Value="_setupToken" Label="Setup code from the server console"
+                              Margin="Margin.Dense" Variant="Variant.Outlined" Class="mb-3" />
+                <MudTextField @bind-Value="_newPassword" Label="Choose a password" Margin="Margin.Dense"
+                              Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-3"
+                              HelperText="At least 8 characters, with an uppercase letter, a number and a special character." />
+                <MudTextField @bind-Value="_confirmPassword" Label="Confirm password" Margin="Margin.Dense"
+                              Variant="Variant.Outlined" InputType="InputType.Password"
+                              OnKeyDown="@(async e => { if (e.Key == "Enter") await CompleteSetup(); })" />
+
+                @if (_loginError is not null)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_loginError</MudText>
+                }
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4"
+                           FullWidth="true" OnClick="CompleteSetup">Set password</MudButton>
+            </MudForm>
+
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.body2" Style="opacity:.7;">
+                Scrolled past the code? Restart the server - a new one is printed every time until a
+                password is set. The username will be <code>@WebAuthService.DefaultUsername</code>.
+            </MudText>
+        }
+        else if (!Auth.IsReady)
         {
             <MudAlert Severity="Severity.Error" Class="mb-4">
-                No usable credentials were found. Check the server console - if
-                <code>@ModSync.Utility.ProtectedFiles.WebAuthFileName</code> is unreadable, delete it
-                and restart the server to be issued a new password.
+                <code>@ModSync.Utility.ProtectedFiles.WebAuthFileName</code> exists but could not be
+                read, so the page is locked. Delete it from your game folder and restart the server
+                to set a password again.
             </MudAlert>
         }
         else
@@ -82,8 +117,8 @@
             <MudText Typo="Typo.body2" Style="opacity:.7;">
                 <b>Forgotten the password?</b> Delete
                 <code>@ModSync.Utility.ProtectedFiles.WebAuthFileName</code> from your game folder
-                (next to <code>ModSync.Updater.exe</code>) and restart the server. A new password is
-                generated and printed to the server console.
+                (next to <code>ModSync.Updater.exe</code>) and restart the server. It prints a fresh
+                setup code, and this page will ask you to choose a new password.
             </MudText>
         }
     </MudPaper>
@@ -415,8 +450,10 @@ else
             <MudTextField @bind-Value="_currentPassword" Label="Current password" Margin="Margin.Dense"
                           Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-3" />
             <MudTextField @bind-Value="_newPassword" Label="New password" Margin="Margin.Dense"
-                          Variant="Variant.Outlined" InputType="InputType.Password" Immediate="true"
+                          Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-3"
                           HelperText="At least 8 characters, with an uppercase letter, a number and a special character." />
+            <MudTextField @bind-Value="_confirmPassword" Label="Confirm new password" Margin="Margin.Dense"
+                          Variant="Variant.Outlined" InputType="InputType.Password" />
 
             @if (_passwordMessage is not null)
             {
@@ -455,6 +492,9 @@ else
     private bool _saving;
     private bool _saved;
     private string? _saveError;
+
+    private string _setupToken = string.Empty;
+    private string _confirmPassword = string.Empty;
 
     private string _currentPassword = string.Empty;
     private string _newPassword = string.Empty;
@@ -504,6 +544,27 @@ else
         await LoadDraft();
     }
 
+    private async Task CompleteSetup()
+    {
+        var problem = Auth.CompleteSetup(_setupToken, _newPassword, _confirmPassword);
+
+        if (problem is not null)
+        {
+            _loginError = problem;
+            return;
+        }
+
+        _loginError = null;
+        _setupToken = string.Empty;
+        _newPassword = string.Empty;
+        _confirmPassword = string.Empty;
+
+        // Setting the password is also signing in - making them type it straight back would be
+        // ceremony, not security.
+        Session.Grant();
+        await LoadDraft();
+    }
+
     private void ChangePassword()
     {
         _passwordChanged = false;
@@ -513,6 +574,12 @@ else
         if (!Auth.Verify(Auth.Username, _currentPassword))
         {
             _passwordMessage = "That is not the current password.";
+            return;
+        }
+
+        if (_newPassword != _confirmPassword)
+        {
+            _passwordMessage = "The two passwords do not match.";
             return;
         }
 
@@ -526,6 +593,7 @@ else
         Auth.SetPassword(_newPassword);
         _currentPassword = string.Empty;
         _newPassword = string.Empty;
+        _confirmPassword = string.Empty;
         _passwordChanged = true;
         _passwordMessage = "Password changed.";
     }
