@@ -153,7 +153,7 @@ jobs:
 
             ## Upgrade notes
 
-            Unzip into your game root as usual - clients update themselves via sync, no manual steps.
+            Unzip into your game/server root as usual - clients update themselves via sync, no manual steps.
 
             Your existing `config.jsonc` is untouched and behaves exactly as before; `optional` defaults to false.
 
