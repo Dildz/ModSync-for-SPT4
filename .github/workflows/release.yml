@@ -122,7 +122,7 @@ jobs:
           # This text is baked into every release page verbatim - a stale body means the
           # release ships with the PREVIOUS version's changelog (happened on v0.12.4).
           body: |
-            ## Requires SPT 4.0.x
+            ## Requires SPT 4.0.13
 
             Built against **SPT 4.0.13** and declared as `~4.0.0`, so it loads on any 4.0.x. It will not load on SPT 4.1.x: the server checks which `SPTarkov.Server.Core` a mod was compiled against and refuses to load it on a mismatch.
 
@@ -141,7 +141,7 @@ jobs:
 
             ## Upgrade notes
 
-            Unzip into your game root as usual - clients update via sync, no manual steps.
+            Unzip into your game/server root as usual - clients update via sync, no manual steps.
 
             Your existing `config.jsonc` is untouched and behaves exactly as before; `optional` defaults to false.
 
