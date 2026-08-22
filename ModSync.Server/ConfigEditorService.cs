@@ -193,10 +193,11 @@ public class ConfigEditorService
                     "This is a catch-all path. Marking it optional gives every player a checkbox that "
                     + "uninstalls their whole modset, including the mods they need in order to connect.", true));
 
-            if (row.BaseFiles.Count > 0 && !row.Enabled && !row.Optional)
-                warnings.Add(new ConfigWarning(row.Path,
-                    "This path declares baseFiles but is opt-in and has no menu toggle, so those files "
-                    + "will never reach a client.", false));
+            // Deliberately NOT warned about: baseFiles on an `enabled: false` path. That reads like a
+            // mod whose extra files can never be delivered, but `enabled: false` IS a working F12
+            // toggle - Plugin.IsOptional treats `optional || !enabled` as player-choosable - so the
+            // files arrive as soon as the player ticks it. This is the standard opt-in mod shape and
+            // warning about it fires on almost every real config.
         }
 
         var duplicates = draft.SyncPaths
