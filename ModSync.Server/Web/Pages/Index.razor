@@ -1,0 +1,93 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using MudBlazor
+@page "/modsync"
+@namespace ModSync.Server.Web.Pages
+@using ModSync.Server
+@layout ModSync.Server.Web.Layouts.MainLayout
+
+@*
+    The landing page for the mod's card on the SPT home screen.
+
+    Two doors, because there are two reasons to arrive here: you are setting the server up and
+    want the option reference, or you want to understand what ModSync is doing to your clients.
+    Phase B turns the first card into the editor; until then it points at the same reference the
+    wiki carries, which is the honest thing to show rather than a disabled control.
+*@
+
+<MudText Typo="Typo.h5" Class="mb-1">Corter ModSync</MudText>
+<MudText Typo="Typo.body2" Class="mb-6" Style="opacity:.7;">
+    Keeps every player's mods &amp; configs in sync with the server, without maintaining G-Drive links.
+</MudText>
+
+<MudGrid>
+    @foreach (var card in Cards)
+    {
+        <MudItem xs="12" sm="6">
+            @* The whole card is the link, not a caption inside it. MudLink renders a real <a>, so
+               keyboard focus, middle-click and "open in new tab" all behave as expected - which a
+               div with an @onclick would quietly lose. *@
+            <MudLink Href="@card.Href" Underline="Underline.None" Class="modsync-card">
+                <MudPaper Class="pa-6 d-flex flex-column" Elevation="1" Style="height:100%;">
+                    <MudIcon Icon="@card.Icon" Color="Color.Primary" Size="Size.Large" Class="mb-3" />
+
+                    <MudText Typo="Typo.h6" Class="mb-1">@card.Title</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-4" Style="opacity:.7; flex-grow:1;">@card.Blurb</MudText>
+
+                    <MudText Typo="Typo.body2" Color="Color.Primary" Class="modsync-card-cta">
+                        @card.LinkText
+                    </MudText>
+                </MudPaper>
+            </MudLink>
+        </MudItem>
+    }
+</MudGrid>
+
+<style>
+    /* MudPaper has no hover state of its own - it is a surface, not a control. Since the whole
+       card is now clickable it has to look clickable, so lift it slightly on hover and focus. */
+    .modsync-card { display: block; height: 100%; color: inherit; }
+    .modsync-card .mud-paper {
+        cursor: pointer;
+        transition: background-color .15s ease, transform .15s ease;
+    }
+    .modsync-card:hover .mud-paper,
+    .modsync-card:focus-visible .mud-paper {
+        background-color: rgba(255, 255, 255, .06);
+        transform: translateY(-2px);
+    }
+    .modsync-card:focus-visible { outline: 2px solid var(--mud-palette-primary); outline-offset: 2px; }
+    .modsync-card:focus { outline: none; }
+    .modsync-card-cta::after { content: " \2192"; }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .modsync-card .mud-paper { transition: none; }
+        .modsync-card:hover .mud-paper, .modsync-card:focus-visible .mud-paper { transform: none; }
+    }
+</style>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mt-6">
+    Editing the config from here is not implemented yet. Changes still go in
+    <code>config.jsonc</code>, and the server needs a restart to pick them up.
+</MudAlert>
+
+@code {
+    private record Card(string Title, string Blurb, string Icon, string Href, string LinkText);
+
+    private static readonly Card[] Cards =
+    [
+        new("Configuration",
+            "Every option in config.jsonc: what it does, what it defaults to, and when to reach for it. "
+            + "Start at the overview if you are setting a server up for the first time.",
+            Icons.Material.Filled.Tune,
+            "/modsync/Configuration",
+            "Open the configuration reference"),
+
+        new("Documentation",
+            "How a sync run actually works, worked config examples from minimal to a real server, "
+            + "and answers to the questions that come up most often.",
+            Icons.Material.Filled.MenuBook,
+            "/modsync/How-Sync-Works",
+            "Read the documentation"),
+    ];
+}
