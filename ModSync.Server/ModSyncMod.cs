@@ -106,11 +106,10 @@ public class ModSyncMod(
     // to anything that accepts one so a shutdown mid-startup doesn't leave work running.
     public async Task OnLoadAsync(CancellationToken cancellationToken)
     {
-        // Before anything else, and deliberately before the config load can bail out: on a first
-        // boot this prints the configuration page's one-time setup code, which the admin uses to
-        // choose their own password. It has to happen at startup rather than on first visit,
-        // because the console is where an admin will be looking - and because a setup form nobody
-        // has to prove anything to would be claimed by whoever opened the page first.
+        // Before anything else, and deliberately before the config load can bail out: reads the
+        // configuration page's credentials, and on a first boot prints a note that no password has
+        // been set yet. At startup rather than on first visit, because the console is where an admin
+        // will be looking, and an outstanding password is worth knowing about before players connect.
         webAuth.EnsureCredentials();
 
         Config config;

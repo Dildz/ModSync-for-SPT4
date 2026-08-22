@@ -45,13 +45,12 @@ public class WebAuthService(ISptLogger<WebAuthService> logger)
         Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), ProtectedFiles.WebAuthPath));
 
     private WebAuthFile? _credentials;
-    private string? _setupToken;
     private bool _locked;
 
     /// <summary>Where the login stands. The UI shows a different form for each.</summary>
     public enum AuthState
     {
-        /// <summary>No credential file yet - the admin chooses a password, proving they can see the console.</summary>
+        /// <summary>No credential file yet - the page asks the admin to choose a password.</summary>
         NeedsSetup,
 
         /// <summary>Credentials exist; the login form applies.</summary>
@@ -67,8 +66,7 @@ public class WebAuthService(ISptLogger<WebAuthService> logger)
         : AuthState.NeedsSetup;
 
     /// <summary>
-    /// Work out where the login stands, and on a first boot print the one-time setup code the admin
-    /// needs in order to choose a password.
+    /// Work out where the login stands, and say so on the console when no password is set yet.
     ///
     /// Three outcomes, and the middle one is the security-relevant one: credentials load and the
     /// login form applies; no file exists so setup begins; or a file exists and cannot be read, in
@@ -105,33 +103,20 @@ public class WebAuthService(ISptLogger<WebAuthService> logger)
             return;
         }
 
-        // First boot. The admin picks their own password, but they have to prove they can see this
-        // console first.
-        //
-        // **Why a token at all.** This page is served on the port Fika clients sync against, which
-        // is frequently port-forwarded. A setup form that anyone could complete would mean whoever
-        // reaches it first owns the config editor - and the config editor decides which DLLs land in
-        // every player's BepInEx folder. The window is not small either: it runs from first boot
-        // until the admin happens to visit, which can be days.
-        //
-        // Held in memory only, never written down. A restart issues a fresh one, so an admin who
-        // scrolled past it just restarts rather than hunting through old logs.
-        _setupToken = GenerateSetupToken();
-
+        // First boot: nobody has set a password. Say so on the console, because until the admin
+        // sets one the page will accept a password from whoever opens it - so how soon they get to
+        // it is a decision they can only make if they know it is outstanding.
         logger.LogWithColor(
             $"""
 
             ┌─ Corter-ModSync ────────────────────────────────────────────────
             │ The ModSync configuration page has no password yet.
             │
-            │   setup code   {_setupToken}
+            │ Open it from the server's web UI, under ModSync, and choose one.
+            │ The username is {DefaultUsername}.
             │
-            │ Open the page from the server's web UI, under ModSync, and use
-            │ this code once to choose your own password. The username is
-            │ {DefaultUsername}.
-            │
-            │ The code is only good until the password is set, and a new one
-            │ is printed here on every restart until then.
+            │ Until a password is set the page will let anyone set it, so do
+            │ this before opening the server up.
             └─────────────────────────────────────────────────────────────────
 
             """,
@@ -139,17 +124,12 @@ public class WebAuthService(ISptLogger<WebAuthService> logger)
     }
 
     /// <summary>
-    /// Finish first-run setup: check the console code, then store the admin's chosen password.
-    /// Returns null on success, or the reason it was refused.
+    /// Finish first-run setup: store the password the admin chose. Returns null on success, or the
+    /// reason it was refused.
     /// </summary>
-    public string? CompleteSetup(string? token, string? password, string? confirmation)
+    public string? CompleteSetup(string? password, string? confirmation)
     {
         if (State != AuthState.NeedsSetup) return "A password has already been set.";
-
-        // Constant-time, same as the login path. The code is short-lived but it is still a secret,
-        // and there is no reason to leak it a character at a time.
-        if (_setupToken is null || !FixedTimeEquals(token, _setupToken))
-            return "That setup code does not match the one in the server console.";
 
         if (password != confirmation) return "The two passwords do not match.";
 
@@ -158,10 +138,6 @@ public class WebAuthService(ISptLogger<WebAuthService> logger)
 
         _credentials = Create(DefaultUsername, password!);
         Write(_credentials);
-
-        // Spent. Even though State stops returning NeedsSetup, clearing it keeps the secret from
-        // sitting in memory for the life of the process.
-        _setupToken = null;
 
         logger.Info("Corter-ModSync: the configuration page password has been set.");
         return null;
@@ -231,45 +207,9 @@ public class WebAuthService(ISptLogger<WebAuthService> logger)
         return null;
     }
 
-    // Deliberately narrow: no quotes, backslashes or spaces. This gets copied out of a terminal and
-    // pasted into a browser, and every one of those has a way of not surviving the trip.
-    private const string Specials = "!#$%&*+-=?@^_";
-    private const string Uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-    private const string Lowers = "abcdefghijkmnopqrstuvwxyz";
-    private const string Digits = "23456789";
-
-    /// <summary>
-    /// The one-time code shown on the console during first-run setup.
-    ///
-    /// Letters and digits only - no special characters and no ambiguous glyphs. Unlike a password
-    /// this is read off a terminal and typed into a browser exactly once, by someone who may be
-    /// looking at a Docker log through a web console, so being easy to transcribe matters more than
-    /// being dense. 12 characters from a 55-symbol alphabet is far beyond guessing for a secret that
-    /// stops working the moment it is used.
-    /// </summary>
-    public static string GenerateSetupToken()
-    {
-        const int length = 12;
-        var alphabet = Uppers + Lowers + Digits;
-
-        var chars = new char[length];
-        for (var i = 0; i < length; i++) chars[i] = alphabet[RandomNumberGenerator.GetInt32(alphabet.Length)];
-
-        return new string(chars);
-    }
-
-    /// <summary>
-    /// Compare two secrets without leaking how much of the front matched through timing.
-    ///
-    /// A length mismatch does return early, which leaks the length - that is fine here, the setup
-    /// code is a fixed 12 characters and that is written in this file. What must not leak is which
-    /// characters are right.
-    /// </summary>
-    private static bool FixedTimeEquals(string? a, string b) =>
-        a is not null
-        && CryptographicOperations.FixedTimeEquals(
-            System.Text.Encoding.UTF8.GetBytes(a),
-            System.Text.Encoding.UTF8.GetBytes(b));
+    // What counts as a special character. Punctuation outside this set still passes the length,
+    // case and digit checks - this list only decides what SATISFIES the "special character" rule.
+    private const string Specials = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 
     private static WebAuthFile Create(string username, string password)
     {

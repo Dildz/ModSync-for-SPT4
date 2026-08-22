@@ -51,17 +51,12 @@
 
         @if (Auth.NeedsSetup)
         {
-            @* First run. The admin chooses the password, but the console code proves they can see
-               the server - without it, whoever reached this page first would own the editor, and
-               the editor decides what gets installed on every player's machine. *@
             <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
-                No password has been set yet. The server console printed a <b>setup code</b> - use it
-                once here to choose your own password.
+                No password has been set yet. Choose one now - until you do, this page will accept a
+                password from anyone who opens it.
             </MudAlert>
 
             <MudForm>
-                <MudTextField @bind-Value="_setupToken" Label="Setup code from the server console"
-                              Margin="Margin.Dense" Variant="Variant.Outlined" Class="mb-3" />
                 <MudTextField @bind-Value="_newPassword" Label="Choose a password" Margin="Margin.Dense"
                               Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-3"
                               HelperText="At least 8 characters, with an uppercase letter, a number and a special character." />
@@ -80,8 +75,7 @@
 
             <MudDivider Class="my-4" />
             <MudText Typo="Typo.body2" Style="opacity:.7;">
-                Scrolled past the code? Restart the server - a new one is printed every time until a
-                password is set. The username will be <code>@WebAuthService.DefaultUsername</code>.
+                The username will be <code>@WebAuthService.DefaultUsername</code>.
             </MudText>
         }
         else if (!Auth.IsReady)
@@ -117,8 +111,8 @@
             <MudText Typo="Typo.body2" Style="opacity:.7;">
                 <b>Forgotten the password?</b> Delete
                 <code>@ModSync.Utility.ProtectedFiles.WebAuthFileName</code> from your game folder
-                (next to <code>ModSync.Updater.exe</code>) and restart the server. It prints a fresh
-                setup code, and this page will ask you to choose a new password.
+                (next to <code>ModSync.Updater.exe</code>) and restart the server. This page will
+                then ask you to choose a new password.
             </MudText>
         }
     </MudPaper>
@@ -493,7 +487,6 @@ else
     private bool _saved;
     private string? _saveError;
 
-    private string _setupToken = string.Empty;
     private string _confirmPassword = string.Empty;
 
     private string _currentPassword = string.Empty;
@@ -546,7 +539,7 @@ else
 
     private async Task CompleteSetup()
     {
-        var problem = Auth.CompleteSetup(_setupToken, _newPassword, _confirmPassword);
+        var problem = Auth.CompleteSetup(_newPassword, _confirmPassword);
 
         if (problem is not null)
         {
@@ -555,7 +548,6 @@ else
         }
 
         _loginError = null;
-        _setupToken = string.Empty;
         _newPassword = string.Empty;
         _confirmPassword = string.Empty;
 
