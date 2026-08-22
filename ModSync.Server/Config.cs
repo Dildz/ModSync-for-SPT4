@@ -446,6 +446,48 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
     public static string ConfigFilePath => Path.Combine(GetModDirectory(), "config.jsonc");
 
     /// <summary>
+    /// True when a syncPath resolves to the game root, the server folder, or any ancestor of them -
+    /// the three targets that must never be served.
+    ///
+    /// The server runs from a subfolder of the game root, so `../` is not merely "a lot of files":
+    /// it encloses the server folder, and would send every player profile, config.jsonc and the web
+    /// UI's credential file to every client that connects. `.` (the server folder) is the same
+    /// problem one level down.
+    ///
+    /// <paramref name="serverRoot"/> is passed in rather than read from the process so the rule can
+    /// be tested without depending on where the test host happens to be running - the same split
+    /// ServedPaths.Resolve uses.
+    ///
+    /// The check is a containment test rather than string matching, so `../`, `..`, `./..`,
+    /// `../SPT_Runtime/..` and any other spelling of the same directory are all caught.
+    /// </summary>
+    public static bool IsForbiddenSyncRoot(string syncPath, string serverRoot)
+    {
+        if (string.IsNullOrWhiteSpace(syncPath)) return true;
+
+        // Backslashes first. A config authored on Windows may spell this `..\`, and on Linux a
+        // backslash is an ordinary filename character rather than a separator - so without this the
+        // guard silently passes on exactly the setup that is most common here, a config written on
+        // Windows and run in a Linux container. Treating the two separators as interchangeable is
+        // what the rest of the config path handling already does.
+        var normalized = syncPath.Replace('\\', '/');
+
+        var server = Path.GetFullPath(serverRoot);
+        var gameRoot = Path.GetFullPath(Path.Combine(server, ".."));
+        var resolved = Path.GetFullPath(Path.Combine(server, normalized));
+
+        // If the game root is at or below the resolved path, the resolved path encloses it.
+        // GetRelativePath returns "." for the same directory and a downward path for a descendant;
+        // only a path that escapes upward ("..") means the target sits outside, which is what a
+        // legitimate syncPath like ../BepInEx/plugins produces.
+        var toGameRoot = Path.GetRelativePath(resolved, gameRoot);
+        if (toGameRoot == "." || !toGameRoot.StartsWith("..", StringComparison.Ordinal)) return true;
+
+        // The server folder itself: sharing it would expose profiles and this mod's own config.
+        return Path.GetRelativePath(resolved, server) == ".";
+    }
+
+    /// <summary>
     /// Read config.jsonc from disk; write the default if it doesn't exist yet. Returns the
     /// raw parsed shape (still unvalidated).
     /// </summary>
@@ -755,6 +797,26 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
 
 
         var userPaths = raw.SyncPaths.ConvertAll(BuildSyncPath);
+
+        // Refuse to serve the game root, the server folder, or anything above them, and say so in
+        // red. This is not a size concern: the server folder sits INSIDE the game root, so a
+        // syncPath of `../` would hand every connecting client the whole SPT install - every
+        // player profile, config.jsonc, and the web UI's credential file with it.
+        //
+        // Soft failure on purpose. Dropping the one bad entry keeps a server that is otherwise
+        // fine running, where refusing to start would take the whole server down over a syncPath
+        // the admin can simply delete.
+        var forbidden = userPaths.Where(sp => IsForbiddenSyncRoot(sp.path, Directory.GetCurrentDirectory())).ToList();
+
+        foreach (var sp in forbidden)
+        {
+            logger.Error(
+                $"Corter-ModSync: syncPath '{sp.path}' resolves to the game root or above it, and has been "
+                + "IGNORED. Serving it would send the entire SPT install to every client, including player "
+                + "profiles and this mod's own config. Point the syncPath at a specific folder instead.");
+        }
+
+        userPaths.RemoveAll(forbidden.Contains);
 
         // `optional` asks for a client checkbox; `enforced` says the client gets no say.
         // Enforcement wins, so the checkbox never appears - say why instead of leaving the

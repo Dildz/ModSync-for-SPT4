@@ -177,6 +177,17 @@ public class ConfigEditorService
                     "'optional' and 'enforced' contradict each other. Enforced wins: the path appears in the "
                     + "player's F12 menu as read-only, with no checkbox.", false));
 
+            // Same rule ConfigUtil enforces at load, applied here so the admin is told while they are
+            // typing rather than after a restart drops the entry.
+            if (ConfigUtil.IsForbiddenSyncRoot(row.Path, Directory.GetCurrentDirectory()))
+            {
+                warnings.Add(new ConfigWarning(row.Path,
+                    "This resolves to the game root or above it. It would send the entire SPT install to "
+                    + "every client, including player profiles and this mod's own config, so the server "
+                    + "ignores it. Point it at a specific folder instead.", true));
+                continue;
+            }
+
             if (row.Optional && CatchAlls.Contains(row.Path.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase))
                 warnings.Add(new ConfigWarning(row.Path,
                     "This is a catch-all path. Marking it optional gives every player a checkbox that "
