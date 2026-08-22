@@ -132,7 +132,7 @@ public static class Sync
     /// Strip the <paramref name="basePath"/> prefix (and its trailing separator) from
     /// <paramref name="fullPath"/>. .NET Framework 4.7.2 has no <c>Path.GetRelativePath</c>,
     /// so we do the strip manually. Accepts either '\' (Windows native + Wine) or '/'
-    /// (native Linux .NET) as the separator — so the function works regardless of which
+    /// (native Linux .NET) as the separator - so the function works regardless of which
     /// form the underlying filesystem hands back.
     /// </summary>
     private static string StripBasePath(string basePath, string fullPath)
@@ -174,7 +174,7 @@ public static class Sync
     )
     {
         // Ownership (which syncpath a local file belongs to) is claimed across EVERY path
-        // passed in, even inactive/opt-out ones — so a disabled override carves its files
+        // passed in, even inactive/opt-out ones - so a disabled override carves its files
         // out of an enclosing catch-all's local set, and they're never flagged for add/remove.
         // Only ACTIVE paths get hashed and returned. Default: everything active.
         isActive ??= _ => true;
@@ -184,7 +184,7 @@ public static class Sync
         // Thread-safe dedup set. The hashing pipeline below is `.AsParallel().Select(async ...)`,
         // so multiple threads call `.Add()` concurrently. A plain HashSet<T> isn't thread-safe
         // and corrupts under contention (CI on Windows hit this; local runs usually didn't).
-        // ConcurrentDictionary<TKey, byte> is the idiomatic .NET workaround — there's no
+        // ConcurrentDictionary<TKey, byte> is the idiomatic .NET workaround - there's no
         // built-in ConcurrentHashSet. We only care about the keys; `byte` is just a 1-byte
         // placeholder value.
         var processedFiles = new ConcurrentDictionary<string, byte>();
@@ -199,8 +199,8 @@ public static class Sync
             // Find every candidate file under this syncpath, then hash in parallel.
             //
             // The local walk only filters by REMOTE exclusions (the server's universal
-            // denylist — .nosync sentinels, SPT internals, etc). The player's own
-            // ModSync_Data/Exclusions.jsonc is NOT applied here — that filter is applied
+            // denylist - .nosync sentinels, SPT internals, etc). The player's own
+            // ModSync_Data/Exclusions.jsonc is NOT applied here - that filter is applied
             // to the REMOTE file list later (in Plugin.cs). Reason: a locally-present
             // file that the player added to exclusions still needs to be visible to the
             // diff so GetRemovedFiles can uninstall it (when previousSync says ModSync
@@ -208,7 +208,7 @@ public static class Sync
             // diff and the file would stay forever.
             // baseFiles are base-game files this mod REPLACES, living outside its own folder
             // (e.g. nvngx_dlss.dll). They belong to this syncpath for diff purposes, so append
-            // them to the walk — otherwise the local side would look empty for those paths and
+            // them to the walk - otherwise the local side would look empty for those paths and
             // the diff would re-download them on every launch.
             var baseFilePaths = syncPath.baseFiles
                 .Select(bf => Path.Combine(basePath, bf))
@@ -219,7 +219,7 @@ public static class Sync
                 .Where(file => !processedFiles.ContainsKey(file));
 
             // Inactive path: claim its files (so an enclosing catch-all can't pick them up)
-            // but don't hash or return them — opt-out files are neither installed nor removed.
+            // but don't hash or return them - opt-out files are neither installed nor removed.
             if (!isActive(syncPath))
             {
                 foreach (var file in candidates)

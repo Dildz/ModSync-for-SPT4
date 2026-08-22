@@ -3,7 +3,7 @@ using ModSync.Utility;
 namespace ModSync.Server.Test;
 
 /// <summary>
-/// Tests for SyncUtil.SanitizeDownloadPath — the path traversal guard that validates
+/// Tests for SyncUtil.SanitizeDownloadPath - the path traversal guard that validates
 /// every client download request. A critical security boundary.
 /// Ported from the original TypeScript sync.test.ts "sanitizeDownloadPath" describe block.
 /// </summary>
@@ -63,7 +63,7 @@ public class SanitizeDownloadPathTests
     [Test]
     public void FileInDifferentSyncPath_ThrowsWhenNotConfigured()
     {
-        // patchers is not in syncPaths — even a valid relative path should be rejected
+        // patchers is not in syncPaths - even a valid relative path should be rejected
         var ex = Assert.Throws<HttpError>(() =>
             SyncUtil.SanitizeDownloadPath(@"patchers\SomePatcher.dll", PluginsSyncPath));
 

@@ -12,11 +12,11 @@ namespace ModSync.Utility;
 /// them into its builtin syncpaths, the client matches incoming wire paths against them. The
 /// patcher was already renamed once (Corter-ModSync.Patcher.dll → Corter-ModSync-Prepatch.dll in
 /// v0.12.4); a second rename with two copies of these strings would silently break self-update,
-/// and the symptom — an outdated client quietly making decisions about a newer config — is
+/// and the symptom - an outdated client quietly making decisions about a newer config - is
 /// exactly the failure this set exists to prevent.
 ///
 /// Paths are SERVER-cwd-relative (the server runs from &lt;gameRoot&gt;/SPT/). The client sees
-/// them in WIRE form, game-root-relative with backslashes — use <see cref="ToWire"/>.
+/// them in WIRE form, game-root-relative with backslashes - use <see cref="ToWire"/>.
 /// </summary>
 public static class Builtins
 {

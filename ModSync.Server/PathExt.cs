@@ -44,10 +44,10 @@ public static class PathExt
     /// </summary>
     private static readonly string ServerFolder = new DirectoryInfo(Directory.GetCurrentDirectory()).Name;
 
-    /// <summary>Convert all '/' to '\\' — for paths going out to the Windows BepInEx client.</summary>
+    /// <summary>Convert all '/' to '\\' - for paths going out to the Windows BepInEx client.</summary>
     public static string WinPath(string p) => p.Replace('/', '\\');
 
-    /// <summary>Convert all '\\' to '/' — for normalizing paths before glob matching.</summary>
+    /// <summary>Convert all '\\' to '/' - for normalizing paths before glob matching.</summary>
     public static string UnixPath(string p) => p.Replace('\\', '/');
 
     /// <summary>
@@ -57,7 +57,7 @@ public static class PathExt
     /// prepends the server folder's name (path is inside it, client needs the prefix to reach it).
     ///
     /// Separator-aware: handles both `/` and `\`. The output uses whatever the input used
-    /// for the separator after the modified prefix — we only mutate the leading 3 chars
+    /// for the separator after the modified prefix - we only mutate the leading 3 chars
     /// (or prepend 4 chars), the rest is untouched.
     /// </summary>
     public static string ToWirePath(string serverPath)
@@ -81,7 +81,7 @@ public static class PathExt
     /// + `Path.GetFullPath` on the server. Windows treats both `/` and `\` as separators
     /// so either works, but Linux (where SPT 4 servers often run in Docker) treats `\` as
     /// a literal filename character. A backslash prefix like `..\BepInEx/...` produces a
-    /// mixed-separator string that `Path.GetFullPath` won't normalize on Linux — the
+    /// mixed-separator string that `Path.GetFullPath` won't normalize on Linux - the
     /// `..\` doesn't get collapsed and the request fails sanitization with a confusing
     /// "not in any enabled sync path" error. Forward slash works on both platforms.
     ///

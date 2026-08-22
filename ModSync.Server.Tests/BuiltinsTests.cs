@@ -8,7 +8,7 @@ namespace ModSync.Server.Test;
 /// paths against them to decide whether a run is a self-update.
 ///
 /// If those two views ever disagree, the client stops recognising its own components, never
-/// self-updates, and an outdated plugin goes on interpreting a newer server's config — the
+/// self-updates, and an outdated plugin goes on interpreting a newer server's config - the
 /// failure that made a v0.12.5 client offer to delete a hand-installed DynamicMaps. The patcher
 /// has already been renamed once (v0.12.4), so this is a real risk, not a hypothetical one.
 /// </summary>
@@ -34,7 +34,7 @@ public class BuiltinsTests
             var wire = Builtins.ToWire(builtin);
 
             Assert.That(Builtins.IsBuiltinWirePath(wire), Is.True,
-                $"builtin '{builtin}' is not recognised as '{wire}' — self-update would skip it");
+                $"builtin '{builtin}' is not recognised as '{wire}' - self-update would skip it");
             Assert.That(wire, Does.Not.StartWith(".."),
                 "wire paths are game-root-relative");
         }

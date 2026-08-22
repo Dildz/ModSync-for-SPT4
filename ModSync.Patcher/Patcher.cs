@@ -9,20 +9,20 @@ using Newtonsoft.Json;
 namespace ModSync.Patcher;
 
 /// <summary>
-/// BepInEx preloader patcher — runs before any plugin DLLs are loaded into memory.
+/// BepInEx preloader patcher - runs before any plugin DLLs are loaded into memory.
 ///
 /// Applies ModSync_Data/PendingUpdates to the game directory while almost no files are
 /// locked, solving the "File has a user-mapped section" IOException that occurs when the
 /// plugin tries to overwrite loaded DLLs in-process after downloading updates.
 ///
-/// The one thing still locked at this stage is patcher DLLs themselves — BepInEx loads
+/// The one thing still locked at this stage is patcher DLLs themselves - BepInEx loads
 /// every DLL in BepInEx/patchers/ into memory *before* running any patcher's Finish(),
 /// so a restart never unlocks them. Windows won't let a loaded DLL be overwritten or
 /// deleted, but it CAN be renamed: locked files are moved aside as "*.modsync-old" and
 /// swept up by CleanupOldFiles() on the next boot.
 ///
-/// Everything the patcher does is also appended to ModSync_Data/ModSync.log — the same
-/// file the Windows Updater writes — giving headless setups a persistent log that
+/// Everything the patcher does is also appended to ModSync_Data/ModSync.log - the same
+/// file the Windows Updater writes - giving headless setups a persistent log that
 /// survives BepInEx overwriting LogOutput.log on every boot.
 ///
 /// BepInEx 5.4.21+ discovers patchers via a static TargetDLLs *property* (get_TargetDLLs),
@@ -40,10 +40,10 @@ public static class Patcher
     // Suffix for locked DLLs renamed aside during apply/remove; deleted on the next boot.
     private const string OldFileSuffix = ".modsync-old";
 
-    // Property (not method) — BepInEx 5.4.21+ looks for get_TargetDLLs via reflection.
+    // Property (not method) - BepInEx 5.4.21+ looks for get_TargetDLLs via reflection.
     public static IEnumerable<string> TargetDLLs { get; } = new[] { "Assembly-CSharp.dll" };
 
-    // Required by BepInEx 5.x — a class with no Patch methods is silently skipped (Finish never fires).
+    // Required by BepInEx 5.x - a class with no Patch methods is silently skipped (Finish never fires).
     public static void Patch(AssemblyDefinition assembly) { }
 
     public static void Finish()
@@ -56,7 +56,7 @@ public static class Patcher
         }
         catch (Exception e)
         {
-            // Never let the patcher take down the BepInEx preloader — log and let the game boot.
+            // Never let the patcher take down the BepInEx preloader - log and let the game boot.
             Warn($"Unexpected error: {e}");
         }
     }
@@ -64,11 +64,11 @@ public static class Patcher
     /// <summary>
     /// Folders where a mod may OVERWRITE a base-game file. An existing file here is copied to
     /// .modsync-bak before being overwritten, so removal can put the original back.
-    ///   • Managed/          — Unity assemblies
-    ///   • Plugins/x86_64/   — native Unity plugins (Tarkov DLSS 4.5 replaces nvngx_dlss.dll)
+    ///   • Managed/          - Unity assemblies
+    ///   • Plugins/x86_64/   - native Unity plugins (Tarkov DLSS 4.5 replaces nvngx_dlss.dll)
     ///
     /// A mod that ADDS a file here rather than replacing one gets no backup, and is removed
-    /// like any other synced file — DynamicMaps ships two Unity assemblies EFT does not have.
+    /// like any other synced file - DynamicMaps ships two Unity assemblies EFT does not have.
     /// </summary>
     private static bool IsInProtectedBaseFolder(string relPath)
     {
@@ -129,14 +129,14 @@ public static class Patcher
             // net472 enforces the 260-char MAX_PATH, and `src` (under ModSync_Data\PendingUpdates\)
             // is the longest path in the whole apply pipeline. Hand every filesystem op the
             // \\?\-extended form so deep installs don't throw DirectoryNotFoundException. `rel`
-            // stays raw — it's only used for logging and the IsInProtectedBaseFolder match.
+            // stays raw - it's only used for logging and the IsInProtectedBaseFolder match.
             var srcExt = LongPath.Extended(src);
             var destExt = LongPath.Extended(dest);
 
             try
             {
                 // Staged file already matches what's installed (e.g. leftovers of a
-                // partially failed earlier run) — nothing to apply, just clear it.
+                // partially failed earlier run) - nothing to apply, just clear it.
                 if (File.Exists(destExt) && FilesAreIdentical(srcExt, destExt))
                 {
                     File.Delete(srcExt);
@@ -224,7 +224,7 @@ public static class Patcher
             }
             catch (Exception e)
             {
-                // Per-file fault tolerance — one bad entry must not abort the rest.
+                // Per-file fault tolerance - one bad entry must not abort the rest.
                 Warn($"Could not remove {rel}: {e.Message}");
                 failed.Add(rel);
             }
@@ -239,7 +239,7 @@ public static class Patcher
 
     /// <summary>
     /// File.Copy(overwrite: true) onto a DLL that's loaded in memory throws
-    /// ("file has a user-mapped section"). A loaded DLL can't be overwritten or deleted —
+    /// ("file has a user-mapped section"). A loaded DLL can't be overwritten or deleted -
     /// but it CAN be renamed. So: move the locked file aside and copy fresh. This is how
     /// the patcher updates itself and sibling patcher DLLs, which BepInEx always loads
     /// before running Finish().
@@ -257,7 +257,7 @@ public static class Patcher
                 File.Delete(oldPath);
             File.Move(dest, oldPath);
             File.Copy(src, dest);
-            Info($"{Path.GetFileName(dest)} was in use — old copy moved aside, cleaned up next boot.");
+            Info($"{Path.GetFileName(dest)} was in use - old copy moved aside, cleaned up next boot.");
         }
     }
 
@@ -290,7 +290,7 @@ public static class Patcher
         var bufferA = new byte[81920];
         var bufferB = new byte[81920];
 
-        // Stream.Read may return fewer bytes than asked — loop until the buffer is full
+        // Stream.Read may return fewer bytes than asked - loop until the buffer is full
         // or the stream ends, otherwise equal files could compare as different.
         static int FillBuffer(Stream stream, byte[] buffer)
         {
@@ -353,8 +353,8 @@ public static class Patcher
     private static bool logFileStarted;
 
     /// <summary>
-    /// Mirrors a line into ModSync_Data/ModSync.log — the same file the Windows Updater
-    /// writes — so the patcher's work is diagnosable on headless, where BepInEx
+    /// Mirrors a line into ModSync_Data/ModSync.log - the same file the Windows Updater
+    /// writes - so the patcher's work is diagnosable on headless, where BepInEx
     /// overwrites LogOutput.log on every boot. Only written when the patcher actually
     /// does something; a quiet boot adds nothing.
     /// </summary>

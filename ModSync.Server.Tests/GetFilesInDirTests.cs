@@ -1,7 +1,7 @@
 namespace ModSync.Server.Test;
 
 /// <summary>
-/// Tests for SyncUtil.GetFilesInDir — the recursive file walker that feeds HashModFilesAsync.
+/// Tests for SyncUtil.GetFilesInDir - the recursive file walker that feeds HashModFilesAsync.
 /// Uses real temp directories (same pattern as ModSync.Tests/IntegrationTests.cs).
 /// Ported from the original TypeScript sync.test.ts "hashModFiles" describe block.
 /// </summary>

@@ -30,20 +30,20 @@ public class SyncPath(
     /// <summary>
     /// False = never send this path (or its <see cref="baseFiles"/>) to a Fika headless client.
     /// Needed because a headless has no F12 menu and therefore ignores the opt-in toggles
-    /// entirely — it syncs every configured path, so `enabled:false` alone can't keep a
+    /// entirely - it syncs every configured path, so `enabled:false` alone can't keep a
     /// player-only mod off it. Defaults true (send to everyone), matching previous behaviour.
     /// </summary>
     public readonly bool headless = headless;
 
     /// <summary>
-    /// Files this mod owns that live OUTSIDE its own folder — e.g. the two Unity assemblies
+    /// Files this mod owns that live OUTSIDE its own folder - e.g. the two Unity assemblies
     /// DynamicMaps drops into EscapeFromTarkov_Data/Managed, or the nvngx_dlss.dll that Tarkov
     /// DLSS 4.5 swaps in. Declaring them here binds them to this syncpath's opt-in state, so
     /// they're served only when the mod is active and are never pushed to a player who didn't
     /// ask for the mod.
     ///
     /// A baseFile may either REPLACE a base-game file or simply ADD one the game doesn't ship
-    /// (DynamicMaps' assemblies are additions — EFT has neither). Only a replacement leaves a
+    /// (DynamicMaps' assemblies are additions - EFT has neither). Only a replacement leaves a
     /// &lt;file&gt;.modsync-bak behind, and removal keys off exactly that: a backup means restore
     /// the original, no backup means the mod added the file, so delete it like any other.
     /// </summary>

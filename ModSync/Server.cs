@@ -17,11 +17,11 @@ using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 public class Server(Version pluginVersion)
 {
     /// <summary>
-    /// Class constructor — runs once the first time anything touches `Server`. Installs a
+    /// Class constructor - runs once the first time anything touches `Server`. Installs a
     /// global TLS bypass on <see cref="ServicePointManager"/>.
     ///
     /// **Why both this AND the per-handler callback?** Mono/UnityTLS doesn't always honor
-    /// <c>HttpClientHandler.ServerCertificateCustomValidationCallback</c> — particularly
+    /// <c>HttpClientHandler.ServerCertificateCustomValidationCallback</c> - particularly
     /// on renegotiated TLS sessions or connections pulled from the pool. When that path is
     /// taken, the older <see cref="ServicePointManager.ServerCertificateValidationCallback"/>
     /// is consulted instead. Setting both is belt + suspenders that costs nothing.
@@ -35,7 +35,7 @@ public class Server(Version pluginVersion)
     /// Single shared HttpClient instance, reused for every request.
     ///
     /// **Why static / shared.** `new HttpClient()` per call is a long-standing .NET
-    /// anti-pattern — each instance opens its own socket pool and (for HTTPS) negotiates
+    /// anti-pattern - each instance opens its own socket pool and (for HTTPS) negotiates
     /// a fresh TLS handshake. On large syncs (1000+ files) this exhausted Mono/UnityTLS
     /// resources mid-sync, producing `UNITYTLS_INTERNAL_ERROR` handshake failures that
     /// not even the 5x retry loop could recover from. A single shared client lets .NET's
@@ -44,7 +44,7 @@ public class Server(Version pluginVersion)
     ///
     /// **`ServerCertificateCustomValidationCallback`** bypasses SPT's self-signed cert.
     /// SPT 4 serves over HTTPS on port 6969; SPT's own `SPT.Common.Http.Client` does
-    /// the same bypass on its private instance, but only on its own — not globally.
+    /// the same bypass on its private instance, but only on its own - not globally.
     ///
     /// **`Timeout`** is generous (10 minutes) because `/modsync/fetch` streams files of
     /// arbitrary size; small files finish in milliseconds, huge bundles can legitimately
@@ -96,7 +96,7 @@ public class Server(Version pluginVersion)
         // net472 enforces the 260-char MAX_PATH; deep installs + deeply-nested mods blow past it
         // and FileStream/Directory ops throw DirectoryNotFoundException. Hand the directory- and
         // file-creation calls the extended-length (`\\?\`) form so they bypass the limit. We keep
-        // GetDirectory() operating on the plain path — only the strings that actually touch the
+        // GetDirectory() operating on the plain path - only the strings that actually touch the
         // filesystem get prefixed.
         VFS.CreateDirectory(LongPath.Extended(downloadPath.GetDirectory()));
 
@@ -112,7 +112,7 @@ public class Server(Version pluginVersion)
                     // URL-encode the file path so spaces, special chars, and backslashes
                     // survive the HTTP layer intact. We normalise `\` to `/` first so the
                     // forward-slashes act as path separators (which we want to keep raw),
-                    // then encode each segment individually — that way spaces become %20
+                    // then encode each segment individually - that way spaces become %20
                     // etc. but the path structure stays parseable. Mono's URI handling is
                     // less forgiving than desktop .NET about unescaped chars; on the server
                     // side we already call Uri.UnescapeDataString to decode, so this is
@@ -120,7 +120,7 @@ public class Server(Version pluginVersion)
                     var encodedFile = string.Join("/",
                         file.Replace('\\', '/').Split('/').Select(Uri.EscapeDataString));
 
-                    // SharedClient is reused — DO NOT dispose. Per-request state lives on
+                    // SharedClient is reused - DO NOT dispose. Per-request state lives on
                     // the HttpRequestMessage, which we dispose normally below.
                     using var request = NewRequest(HttpMethod.Get, $"{RequestHandler.Host}/modsync/fetch/{encodedFile}");
                     using var response = await SharedClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -154,7 +154,7 @@ public class Server(Version pluginVersion)
         }
         finally
         {
-            // Always release — previously this only happened on the success path, so a
+            // Always release - previously this only happened on the success path, so a
             // 5x-retry exhaustion (which throws) leaked a slot. Cancellation hid the bug
             // because the whole sync got torn down anyway, but doing this properly costs
             // nothing.
@@ -174,7 +174,7 @@ public class Server(Version pluginVersion)
         // it the server can't tell which side it's serving and would fall back to player defaults.
         // Also announce our version. A server on a different version replies with ONLY ModSync's
         // own components, so an out-of-date plugin can never act on config it may not understand
-        // — it updates itself, restarts, and gets the full list once the versions agree.
+        // - it updates itself, restarts, and gets the full list once the versions agree.
         // Clients too old to send this are treated as mismatched, which is exactly right.
         var query = Plugin.IsHeadless ? "?headless=1&" : "?";
         query += "version=" + Uri.EscapeDataString(Plugin.PluginVersion);

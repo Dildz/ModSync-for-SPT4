@@ -2,7 +2,7 @@
 # avoid spurious diffs between Windows dev machines and the Linux VPS).
 * text eol=lf
 
-# Binary files — don't try to normalize line endings on these.
+# Binary files - don't try to normalize line endings on these.
 # Without this, git warns on every commit that touches References/ or any .sln.
 *.dll binary
 *.exe binary

@@ -1,4 +1,4 @@
-# CI pipeline — runs on every push to a supported-version branch and on PRs targeting one.
+# CI pipeline - runs on every push to a supported-version branch and on PRs targeting one.
 # Builds the solution and runs both test suites. No artifacts, no release.
 #
 # Uses a Windows runner to match the release pipeline (client targets net472).
