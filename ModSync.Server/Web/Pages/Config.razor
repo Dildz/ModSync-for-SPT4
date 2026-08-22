@@ -1,0 +1,220 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using MudBlazor
+@page "/modsync/config"
+@namespace ModSync.Server.Web.Pages
+@using ModSync.Server
+@using ModSync.Server.Web.Components
+@layout ModSync.Server.Web.Layouts.MainLayout
+
+@*
+    Phase B: the editing surface, with no write path behind it yet. Saving arrives in Phase C
+    together with authentication - an editor that can write this file is effectively a remote
+    shell over the port players sync against, so the two have to ship at the same time.
+
+    Everything here edits an in-memory draft read fresh from config.jsonc on each visit.
+*@
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/modsync" Size="Size.Small" />
+    <MudText Typo="Typo.h5">Configuration</MudText>
+</MudStack>
+
+<MudText Typo="Typo.body2" Class="mb-4" Style="opacity:.7;">
+    Reading <code>@ConfigEditorService.ConfigPath</code>.
+    Every option is explained in the <MudLink Href="/modsync/Configuration">configuration reference</MudLink>.
+</MudText>
+
+<MudAlert Severity="Severity.Warning" Class="mb-6">
+    <b>Changes here are not saved yet.</b> This is the editing surface only - saving, and the login
+    that has to guard it, arrive together in the next step. Edit <code>config.jsonc</code> by hand for now.
+</MudAlert>
+
+@if (_draft is null)
+{
+    @if (_error is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">
+            Could not read the config: @_error
+        </MudAlert>
+    }
+}
+else
+{
+    @if (_warnings.Count > 0)
+    {
+        <MudPaper Class="pa-4 mb-6" Elevation="0" Style="border:1px solid var(--mud-palette-warning);">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">@_warnings.Count issue@(_warnings.Count == 1 ? "" : "s") found</MudText>
+            @foreach (var warning in _warnings)
+            {
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start" Class="mb-1">
+                    <MudIcon Size="Size.Small"
+                             Color="@(warning.Blocking ? Color.Error : Color.Warning)"
+                             Icon="@(warning.Blocking ? Icons.Material.Filled.Error : Icons.Material.Filled.Warning)" />
+                    <MudText Typo="Typo.body2">
+                        @if (!string.IsNullOrEmpty(warning.Path))
+                        {
+                            <code>@warning.Path</code>
+                            <text> &mdash; </text>
+                        }
+                        @warning.Message
+                    </MudText>
+                </MudStack>
+            }
+        </MudPaper>
+    }
+
+    <MudText Typo="Typo.h6" Class="mb-1">Sync paths</MudText>
+    <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.7;">
+        What the server sends to clients. @_draft.SyncPaths.Count entr@(_draft.SyncPaths.Count == 1 ? "y" : "ies").
+        ModSync's own components are added automatically and are not listed here.
+    </MudText>
+
+    <MudExpansionPanels MultiExpansion="true" Class="mb-6">
+        @foreach (var row in _draft.SyncPaths)
+        {
+            <MudExpansionPanel>
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body1"><code>@row.Path</code></MudText>
+
+                        @* Only non-default options get a chip. A row showing no chips is behaving
+                           exactly as a bare string would, which is the common case and should look
+                           uncluttered rather than covered in badges saying "default". *@
+                        @foreach (var (label, colour) in ChipsFor(row))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="@colour" Variant="Variant.Text">@label</MudChip>
+                        }
+                    </MudStack>
+                </TitleContent>
+
+                <ChildContent>
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="row.Path" Label="Path" Variant="Variant.Outlined"
+                                          HelperText="Relative to the server folder. Client-side paths start with ../" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="row.Name" Label="Name" Variant="Variant.Outlined"
+                                          HelperText="Shown to players in the F12 menu. Defaults to the path." />
+                        </MudItem>
+
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudSwitch T="bool" @bind-Value="row.Enabled" Color="Color.Primary" Label="Enabled" />
+                            <MudText Typo="Typo.caption" Style="opacity:.6;">Synced by default. Off makes it opt-in.</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudSwitch T="bool" @bind-Value="row.Optional" Color="Color.Primary" Label="Optional" />
+                            <MudText Typo="Typo.caption" Style="opacity:.6;">Gives players a working checkbox for it.</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudSwitch T="bool" @bind-Value="row.Enforced" Color="Color.Primary" Label="Enforced" />
+                            <MudText Typo="Typo.caption" Style="opacity:.6;">Players get no say and cannot exclude it.</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudSwitch T="bool" @bind-Value="row.Headless" Color="Color.Primary" Label="Send to headless" />
+                            <MudText Typo="Typo.caption" Style="opacity:.6;">Off keeps it away from a Fika headless client.</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudSwitch T="bool" @bind-Value="row.RestartRequired" Color="Color.Primary" Label="Restart required" />
+                            <MudText Typo="Typo.caption" Style="opacity:.6;">Client restarts after this path updates.</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudSwitch T="bool" @bind-Value="row.Silent" Color="Color.Primary" Label="Silent" />
+                            <MudText Typo="Typo.caption" Style="opacity:.6;">Update without prompting the player.</MudText>
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <StringList Label="Base files"
+                                        Placeholder="../EscapeFromTarkov_Data/Managed/Example.dll"
+                                        Help="Files this mod owns that live outside its own folder."
+                                        Items="row.BaseFiles"
+                                        OnChanged="Revalidate" />
+                        </MudItem>
+                    </MudGrid>
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+
+    <MudDivider Class="mb-6" />
+
+    @foreach (var section in Sections)
+    {
+        <div class="mb-6">
+            <MudText Typo="Typo.h6" Class="mb-1">@section.Title</MudText>
+            <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.7;">@section.Blurb</MudText>
+            <StringList Label="@section.Title"
+                        Placeholder="@section.Placeholder"
+                        Items="@section.Items(_draft)"
+                        OnChanged="Revalidate" />
+        </div>
+    }
+}
+
+@code {
+    private ConfigDraft? _draft;
+    private string? _error;
+    private IReadOnlyList<ConfigWarning> _warnings = [];
+
+    private record Section(string Title, string Blurb, string Placeholder, Func<ConfigDraft, List<string>> Items);
+
+    private static readonly Section[] Sections =
+    [
+        new("Exclusions",
+            "Glob patterns the server never sends, whatever the sync paths say.",
+            "**/.git",
+            d => d.Exclusions),
+
+        new("Headless includes",
+            "An allowlist: the only BepInEx plugins a Fika headless client receives. Leave empty to send it everything.",
+            "Fika.Headless.dll",
+            d => d.HeadlessIncludes),
+
+        new("Managed includes",
+            "An allowlist over EscapeFromTarkov_Data/Managed. Nothing there is sent unless it is named here.",
+            "../Managed/Unity.VectorGraphics.dll",
+            d => d.ManagedIncludes),
+
+        new("Headless managed includes",
+            "The same allowlist, for headless clients. Usually empty - a headless renders nothing.",
+            "",
+            d => d.HeadlessManagedIncludes),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _draft = await ConfigEditorService.LoadDraftAsync();
+            Revalidate();
+        }
+        catch (Exception ex)
+        {
+            // A malformed config is the admin's problem to fix, but it must not present as a blank
+            // page - say what went wrong and leave config.jsonc alone.
+            _error = ex.Message;
+        }
+    }
+
+    private void Revalidate()
+    {
+        if (_draft is not null) _warnings = ConfigEditorService.Validate(_draft);
+    }
+
+    /// <summary>Chips for the options this row actually changes, so a default row shows none.</summary>
+    private static IEnumerable<(string Label, Color Colour)> ChipsFor(SyncPathRow row)
+    {
+        if (row.Enforced) yield return ("enforced", Color.Error);
+        if (row.Optional) yield return ("optional", Color.Primary);
+        if (!row.Enabled) yield return ("opt-in", Color.Info);
+        if (!row.Headless) yield return ("no headless", Color.Warning);
+        if (row.Silent) yield return ("silent", Color.Default);
+        if (!row.RestartRequired) yield return ("no restart", Color.Default);
+        if (row.BaseFiles.Count > 0) yield return ($"{row.BaseFiles.Count} base file{(row.BaseFiles.Count == 1 ? "" : "s")}", Color.Default);
+    }
+}

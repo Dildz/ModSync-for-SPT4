@@ -1,0 +1,87 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using MudBlazor
+@namespace ModSync.Server.Web.Components
+
+@*
+    An editable list of plain strings.
+
+    Four of the five config sections are exactly this, and so is a syncPath's baseFiles, so it is
+    one component rather than five near-identical blocks of markup. It edits the caller's List<string>
+    in place and raises OnChanged so the page can re-validate.
+*@
+
+<MudStack Spacing="1">
+    @if (Items.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Style="opacity:.5;">Empty.</MudText>
+    }
+
+    @for (var i = 0; i < Items.Count; i++)
+    {
+        // Captured per iteration: without this, every row's callback would close over the loop
+        // variable and edit whichever row happened to be last.
+        var index = i;
+
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+            <MudTextField T="string"
+                          Value="@Items[index]"
+                          ValueChanged="@(v => Set(index, v))"
+                          Immediate="true"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Placeholder="@Placeholder" />
+
+            @* aria-label rather than Title: the button is icon-only, so without it a screen
+               reader announces nothing but "button" on every row. *@
+            <MudIconButton Icon="@Icons.Material.Filled.Close"
+                           Size="Size.Small"
+                           aria-label="@($"Remove {Items[index]}")"
+                           OnClick="@(() => RemoveAt(index))" />
+        </MudStack>
+    }
+
+    <div>
+        <MudButton StartIcon="@Icons.Material.Filled.Add"
+                   Size="Size.Small"
+                   Variant="Variant.Text"
+                   OnClick="Add">
+            Add @(string.IsNullOrEmpty(Label) ? "entry" : Label.TrimEnd('s').ToLowerInvariant())
+        </MudButton>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Help))
+    {
+        <MudText Typo="Typo.caption" Style="opacity:.6;">@Help</MudText>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public List<string> Items { get; set; } = [];
+
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public string Placeholder { get; set; } = string.Empty;
+    [Parameter] public string Help { get; set; } = string.Empty;
+
+    /// <summary>Raised after any edit, so the page can re-run validation.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private async Task Set(int index, string value)
+    {
+        Items[index] = value;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveAt(int index)
+    {
+        Items.RemoveAt(index);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task Add()
+    {
+        Items.Add(string.Empty);
+        await OnChanged.InvokeAsync();
+    }
+}
