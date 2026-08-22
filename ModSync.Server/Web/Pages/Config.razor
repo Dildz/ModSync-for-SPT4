@@ -6,11 +6,14 @@
 @using ModSync.Server
 @using ModSync.Server.Web.Components
 @layout ModSync.Server.Web.Layouts.MainLayout
+@inject WebAuthService Auth
+@inject WebAuthSession Session
 
 @*
-    Phase B: the editing surface, with no write path behind it yet. Saving arrives in Phase C
-    together with authentication - an editor that can write this file is effectively a remote
-    shell over the port players sync against, so the two have to ship at the same time.
+    Saving and the login that guards it shipped together, on purpose. This page writes the file that
+    decides which DLLs land in every player's BepInEx folder, and it is served on the same port Fika
+    clients sync against - so an unauthenticated version of it, once it could write, would be a
+    remote shell rather than a config page.
 
     THE SHAPE OF THIS PAGE IS DELIBERATE, and it is not "a form over config.jsonc".
 
@@ -37,7 +40,55 @@
     exactly as it is. Reading <code>@ConfigEditorService.ConfigPath</code>.
 </MudText>
 
-@if (_draft is null)
+@if (!Session.IsAuthenticated)
+{
+    <MudPaper Outlined="true" Class="pa-6 mx-auto" Style="max-width:420px;">
+        <MudText Typo="Typo.h6" Class="mb-1">Sign in</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4" Style="opacity:.7;">
+            The configuration page is protected because saving it decides what gets installed on
+            every player's machine.
+        </MudText>
+
+        @if (!Auth.IsReady)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">
+                No usable credentials were found. Check the server console - if
+                <code>@ModSync.Utility.ProtectedFiles.WebAuthFileName</code> is unreadable, delete it
+                and restart the server to be issued a new password.
+            </MudAlert>
+        }
+        else
+        {
+            <MudForm>
+                <MudTextField @bind-Value="_user" Label="Username" Margin="Margin.Dense"
+                              Variant="Variant.Outlined" Class="mb-3" />
+                <MudTextField @bind-Value="_password" Label="Password" Margin="Margin.Dense"
+                              Variant="Variant.Outlined" InputType="InputType.Password"
+                              OnKeyDown="@(async e => { if (e.Key == "Enter") await SignIn(); })" />
+
+                @if (_loginError is not null)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">@_loginError</MudText>
+                }
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4"
+                           FullWidth="true" OnClick="SignIn">Sign in</MudButton>
+            </MudForm>
+
+            @* Recovery without a reset flow, an email server, or a back door: the credential file is
+               the only authority, so deleting it is the reset. Said here because an admin who has
+               lost the password has no other way to find this out. *@
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.body2" Style="opacity:.7;">
+                <b>Forgotten the password?</b> Delete
+                <code>@ModSync.Utility.ProtectedFiles.WebAuthFileName</code> from your game folder
+                (next to <code>ModSync.Updater.exe</code>) and restart the server. A new password is
+                generated and printed to the server console.
+            </MudText>
+        }
+    </MudPaper>
+}
+else if (_draft is null)
 {
     @if (_error is null)
     {
@@ -323,10 +374,60 @@ else
         </MudExpansionPanel>
     </MudExpansionPanels>
 
-    <MudAlert Severity="Severity.Info" Class="mb-4">
-        <b>Changes here are not saved yet.</b> This is the editing surface only - saving, and the login
-        that has to guard it, arrive together in the next step. Edit <code>config.jsonc</code> by hand for now.
-    </MudAlert>
+    @* ---------------- save ---------------- *@
+    @if (_saveError is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">Could not save: @_saveError</MudAlert>
+    }
+    else if (_saved)
+    {
+        <MudAlert Severity="Severity.Success" Class="mb-4">
+            Saved. <b>Restart the server to apply it</b> - players pick the changes up on their next connect.
+        </MudAlert>
+    }
+
+    <MudPaper Outlined="true" Class="pa-3 mb-6">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <div style="flex:1;min-width:0;">
+                <MudText Typo="Typo.body2">
+                    @SharedCatchAlls folders shared, @_curated.Count optional,
+                    @_draft.HeadlessIncludes.Count to headless
+                </MudText>
+                <MudText Typo="Typo.caption" Style="opacity:.6;">
+                    Your current file is copied to <code>config.jsonc.bak</code> the first time you save.
+                </MudText>
+            </div>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       Disabled="@_saving" OnClick="Save">
+                @(_saving ? "Saving..." : "Save changes")
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @* ---------------- account ---------------- *@
+    <MudExpansionPanels Elevation="0" Class="mb-6">
+        <MudExpansionPanel Text="Change password">
+            <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.75;">
+                The password issued on first boot is fine, but it is long and awkward to type. Signed
+                in as <b>@Auth.Username</b>.
+            </MudText>
+
+            <MudTextField @bind-Value="_currentPassword" Label="Current password" Margin="Margin.Dense"
+                          Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-3" />
+            <MudTextField @bind-Value="_newPassword" Label="New password" Margin="Margin.Dense"
+                          Variant="Variant.Outlined" InputType="InputType.Password" Immediate="true"
+                          HelperText="At least 8 characters, with an uppercase letter, a number and a special character." />
+
+            @if (_passwordMessage is not null)
+            {
+                <MudText Typo="Typo.body2" Color="@(_passwordChanged ? Color.Success : Color.Error)" Class="mt-2">
+                    @_passwordMessage
+                </MudText>
+            }
+
+            <MudButton Variant="Variant.Outlined" Class="mt-4" OnClick="ChangePassword">Change password</MudButton>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
 }
 
 @code {
@@ -346,6 +447,19 @@ else
     private bool _showPathEntry;
     private bool _editHeadless;
     private string _headlessFilter = string.Empty;
+
+    private string _user = WebAuthService.DefaultUsername;
+    private string _password = string.Empty;
+    private string? _loginError;
+
+    private bool _saving;
+    private bool _saved;
+    private string? _saveError;
+
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+    private string? _passwordMessage;
+    private bool _passwordChanged;
 
     private int SharedCatchAlls =>
         _draft is null ? 0 : ConfigEditorService.CatchAlls.Count(p => _draft.SyncPaths.Exists(r => r.Path.Replace('\\', '/') == p));
@@ -369,7 +483,85 @@ else
         return n == 0 ? "empty, or not present on this server" : $"{n} entr{(n == 1 ? "y" : "ies")}";
     }
 
+    private async Task SignIn()
+    {
+        // No lockout and no attempt counter: this runs over a SignalR circuit rather than a public
+        // endpoint, the password is 16 random characters, and PBKDF2 at 210k iterations already
+        // makes each guess cost real time. A counter here would mostly be a way for a stranger to
+        // lock the admin out of their own server.
+        if (!Auth.Verify(_user, _password))
+        {
+            _loginError = "That username and password did not match.";
+            _password = string.Empty;
+            return;
+        }
+
+        _loginError = null;
+        _password = string.Empty;
+        Session.Grant();
+
+        // The config was never read while logged out - loading it is part of signing in.
+        await LoadDraft();
+    }
+
+    private void ChangePassword()
+    {
+        _passwordChanged = false;
+
+        // Proving the current password matters even though the circuit is already authenticated:
+        // it is what stops someone who walks up to an unlocked browser from locking the admin out.
+        if (!Auth.Verify(Auth.Username, _currentPassword))
+        {
+            _passwordMessage = "That is not the current password.";
+            return;
+        }
+
+        var problem = WebAuthService.DescribePasswordProblem(_newPassword);
+        if (problem is not null)
+        {
+            _passwordMessage = problem;
+            return;
+        }
+
+        Auth.SetPassword(_newPassword);
+        _currentPassword = string.Empty;
+        _newPassword = string.Empty;
+        _passwordChanged = true;
+        _passwordMessage = "Password changed.";
+    }
+
+    private async Task Save()
+    {
+        // The gate that actually matters. Everything above is a rendering decision; this is the
+        // line an unauthenticated caller would have to get past to write the file.
+        if (!Session.IsAuthenticated || _draft is null) return;
+
+        _saving = true;
+        _saveError = null;
+        _saved = false;
+
+        try
+        {
+            await ConfigEditorService.SaveAsync(_draft);
+            _saved = true;
+        }
+        catch (Exception ex)
+        {
+            _saveError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
     protected override async Task OnInitializedAsync()
+    {
+        Auth.EnsureCredentials();
+        if (Session.IsAuthenticated) await LoadDraft();
+    }
+
+    private async Task LoadDraft()
     {
         try
         {
@@ -393,6 +585,11 @@ else
     private void Refresh()
     {
         if (_draft is null) return;
+
+        // Any edit invalidates "Saved" - leaving that banner up over changed content would tell an
+        // admin their current screen is on disk when it is not.
+        _saved = false;
+
         _curated = ConfigEditorService.Curated(_draft);
         _warnings = ConfigEditorService.Validate(_draft);
     }

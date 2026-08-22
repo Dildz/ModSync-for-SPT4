@@ -91,6 +91,7 @@ public record ModMetadata : IModMetadata, IModBlazorMetadata
 public class ModSyncMod(
     ISptLogger<ModSyncMod> logger,
     ConfigUtil configUtil,
+    WebAuthService webAuth,
     ModSyncHttpListener listener) : IOnLoad
 {
     // The two built-in files the mod author must ship in the mod folder alongside
@@ -105,6 +106,13 @@ public class ModSyncMod(
     // to anything that accepts one so a shutdown mid-startup doesn't leave work running.
     public async Task OnLoadAsync(CancellationToken cancellationToken)
     {
+        // Before anything else, and deliberately before the config load can bail out: on a first
+        // boot this generates the configuration page's login and prints the password to the console
+        // exactly once. It has to happen at startup rather than on first visit, because the console
+        // is where an admin will be looking - and because a password that appears the moment a
+        // stranger opens the page is not much of a password.
+        webAuth.EnsureCredentials();
+
         Config config;
 
         try

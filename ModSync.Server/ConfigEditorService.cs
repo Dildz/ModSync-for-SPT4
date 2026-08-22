@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using SPTarkov.DI.Annotations;
 
 namespace ModSync.Server;
@@ -224,6 +225,80 @@ public class ConfigEditorService
                 $"'{group.Key}' is listed {group.Count()} times. Only one of them will take effect.", false));
 
         return warnings;
+    }
+
+    /// <summary>
+    /// Turn a draft back into config.jsonc text. Pure, so what gets written to an admin's file can
+    /// be asserted without touching a disk.
+    ///
+    /// **Only non-default options are written.** An entry with nothing set collapses back to a bare
+    /// string, which is what keeps a config of nine tidy one-line entries from turning into nine
+    /// nine-line blocks the first time someone toggles something unrelated. It also means the file
+    /// never accumulates a wall of keys restating the defaults.
+    /// </summary>
+    public static string Serialize(ConfigDraft draft)
+    {
+        var syncPaths = new JsonArray();
+
+        foreach (var row in draft.SyncPaths)
+        {
+            if (row.IsAllDefaults)
+            {
+                syncPaths.Add(JsonValue.Create(row.Path));
+                continue;
+            }
+
+            var entry = new JsonObject { ["path"] = row.Path };
+
+            if (!string.IsNullOrEmpty(row.Name) && row.Name != row.Path) entry["name"] = row.Name;
+            if (!row.Enabled) entry["enabled"] = false;
+            if (row.Optional) entry["optional"] = true;
+            if (row.Enforced) entry["enforced"] = true;
+            if (row.Silent) entry["silent"] = true;
+            if (!row.RestartRequired) entry["restartRequired"] = false;
+            if (!row.Headless) entry["headless"] = false;
+            if (row.BaseFiles.Count > 0) entry["baseFiles"] = Strings(row.BaseFiles);
+
+            syncPaths.Add(entry);
+        }
+
+        var root = new JsonObject
+        {
+            ["syncPaths"] = syncPaths,
+            ["exclusions"] = Strings(draft.Exclusions),
+            ["headlessIncludes"] = Strings(draft.HeadlessIncludes),
+            ["managedIncludes"] = Strings(draft.ManagedIncludes),
+            ["headlessManagedIncludes"] = Strings(draft.HeadlessManagedIncludes),
+        };
+
+        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
+
+        static JsonArray Strings(List<string> items)
+        {
+            var array = new JsonArray();
+            foreach (var item in items) array.Add(JsonValue.Create(item));
+            return array;
+        }
+    }
+
+    /// <summary>
+    /// Write the draft to config.jsonc, keeping a copy of whatever was there before.
+    ///
+    /// The backup is written ONCE, and never overwritten afterwards. Existing installs have a config
+    /// that is around 85% hand-written comments, and this editor cannot preserve them - the whole
+    /// point of moving that documentation into the UI is that the file stops needing them. So the
+    /// one copy worth keeping forever is the last one a human wrote, not the last one this page
+    /// wrote: refreshing the backup on every save would quietly eat it on the second click.
+    /// </summary>
+    public static async Task SaveAsync(ConfigDraft draft, CancellationToken cancellationToken = default)
+    {
+        var path = ConfigPath;
+        var backup = path + ".bak";
+
+        if (File.Exists(path) && !File.Exists(backup))
+            File.Copy(path, backup);
+
+        await File.WriteAllTextAsync(path, Serialize(draft), cancellationToken);
     }
 
     /// <summary>True for one of the three folders that between them cover the whole client modset.</summary>

@@ -82,6 +82,12 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
 
         if (File.Exists(dir))
         {
+            // Unconditional, and deliberately ABOVE the exclusions check rather than inside it -
+            // see ProtectedFiles. An enforced syncpath arrives here with skipExclusions: true, so a
+            // guard placed below this line would be switched off by the very config that needs
+            // guarding against.
+            if (ProtectedFiles.IsProtected(dir, Directory.GetCurrentDirectory())) yield break;
+
             if (!skipExclusions && config.IsExcluded(dir)) yield break;
             yield return dir;
             yield break;
@@ -93,6 +99,9 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
         // entry from the OS at a time, doesn't materialize the full list.
         foreach (var file in Directory.EnumerateFiles(dir))
         {
+            // Same rule, same reason: outside the skipExclusions check, never inside it.
+            if (ProtectedFiles.IsProtected(file, Directory.GetCurrentDirectory())) continue;
+
             if (!skipExclusions && config.IsExcluded(file)) continue;
             yield return file;
             hasContents = true;
@@ -297,6 +306,12 @@ public class SyncUtil(Config config, ISptLogger<SyncUtil> logger)
     {
         var serverRoot = Directory.GetCurrentDirectory();
         var requested = Path.GetFullPath(Path.Combine(serverRoot, file));
+
+        // The second, independent gate. Never advertising a file does not make it unreachable: a
+        // client can ask for any path by name, and this one's name is fixed and documented. Checked
+        // before the syncpath walk so no amount of config can talk the server into serving it.
+        if (ProtectedFiles.IsProtected(requested, serverRoot))
+            throw new HttpError(400, $"Corter-ModSync: '{file}' is never served to clients.");
 
         foreach (var sp in syncPaths)
         {
