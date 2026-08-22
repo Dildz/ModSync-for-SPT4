@@ -139,17 +139,17 @@ public class Plugin : BaseUnityPlugin
     public static string PluginVersion => MetadataHelper.GetMetadata(typeof(Plugin)).Version.ToString();
 
     /// <summary>
-    /// True if this syncpath's files already exist on the client. Used to seed an opt-in
-    /// toggle's DEFAULT to the installed state, so a mod the player already has isn't
-    /// defaulted off and immediately flagged for removal. Only affects the first bind.
-    /// </summary>
-    /// <summary>
     /// Mirrors a line into ModSync_Data/ModSync.log. Used for one-shot events a player may only
     /// question days later, by which point BepInEx has overwritten LogOutput.log several times.
     /// </summary>
     private static void AppendToModSyncLog(string message) =>
         ModSyncLog.Append(Directory.GetCurrentDirectory(), "Plugin", message);
 
+    /// <summary>
+    /// True if this syncpath's files already exist on the client. Used to seed an opt-in
+    /// toggle's DEFAULT to the installed state, so a mod the player already has isn't
+    /// defaulted off and immediately flagged for removal. Only affects the first bind.
+    /// </summary>
     private static bool IsInstalledLocally(string relPath)
     {
         var full = Path.Combine(Directory.GetCurrentDirectory(), relPath);

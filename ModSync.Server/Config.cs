@@ -465,6 +465,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         catch (Exception e)
         {
             // Reference-only - never block startup over it.
+            logger.LogWithColor($"Corter-ModSync: could not write config_default.jsonc: {e.Message}", Color.Grey);
         }
 
         var text = await File.ReadAllTextAsync(configPath);
@@ -501,6 +502,7 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
         logger.LogWithColor(
             $"Corter-ModSync: your config.jsonc predates these options: {string.Join(", ", missing)}. "
             + "Defaults are in use - see config_default.jsonc alongside it for the documented versions.",
+            Color.Grey);
     }
 
     /// <summary>
