@@ -439,12 +439,19 @@ public class ConfigUtil(ISptLogger<ConfigUtil> logger)
     }
 
     /// <summary>
+    /// Absolute path to the live config.jsonc. Public because the web editor reads and writes the
+    /// same file, and a second copy of this expression is a second chance for the two to disagree
+    /// about which file is being edited.
+    /// </summary>
+    public static string ConfigFilePath => Path.Combine(GetModDirectory(), "config.jsonc");
+
+    /// <summary>
     /// Read config.jsonc from disk; write the default if it doesn't exist yet. Returns the
     /// raw parsed shape (still unvalidated).
     /// </summary>
     private async Task<RawConfig> ReadConfigFileAsync()
     {
-        var configPath = Path.Combine(GetModDirectory(), "config.jsonc");
+        var configPath = ConfigFilePath;
 
         if (!File.Exists(configPath))
         {
