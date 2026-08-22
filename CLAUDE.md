@@ -1,42 +1,63 @@
-# CLAUDE.md - ModSync for SPT 4.0
+# CLAUDE.md - ModSync for SPT 4.1
 
 Project-level instructions for Claude Code. Loaded automatically in every session opened from this directory.
 
 ## What this is
 
-Fork of [c-orter/ModSync](https://github.com/c-orter/ModSync) being ported from SPT 3.11 to **SPT 4.0.x**. Fork lives at [Dildz/ModSync-for-SPT4](https://github.com/Dildz/ModSync-for-SPT4).
+Fork of [c-orter/ModSync](https://github.com/c-orter/ModSync), ported from SPT 3.11 to SPT 4. Fork lives at [Dildz/ModSync-for-SPT4](https://github.com/Dildz/ModSync-for-SPT4).
+
+**This worktree is the `SPT4.1.x` branch** - the line still in active development, and the only one that gets new SPT support until SPT 5 lands. The 4.0 line is frozen at SPT 4.0.13 (the final 4.0 release) and lives in the sibling worktree `../ModSync-for-SPT4.0`; the two share one `.git`, so `git worktree list` from either shows both.
 
 Upstream's last release (`v0.11.1`, Mar 2025) targets SPT 3.11. No upstream SPT 4 work exists. License is WTFPL - keep Corter attribution but otherwise unrestricted.
 
 ## Branch strategy
 
 - `main` - mirror of upstream `c-orter/ModSync` main. Do not modify directly. Used to pull future upstream changes cleanly.
-- `SPT4.0.x` - primary working branch for the port. All porting commits land here. Naming matches Dildz's convention used in other ports (`Southern-Hemisphere-Seasons-SPT4.0.x`, etc.).
+- `SPT4.1.x` - **the branch this worktree is on, and the maintained one.** All new work lands here.
+- `SPT4.0.x` - the 4.0 line, frozen at SPT 4.0.13. Bug fixes only; features are ported here from 4.1 rather than developed on it. Checked out in the sibling worktree, so git will refuse to check it out here.
 - Other inherited branches (`dev`, `SPT/3.10`, `SPT-3.8.3`) - leave alone, they're upstream history.
 
-## Project structure (post-port targets)
+## Project structure and targets
 
-| Project | Original | After port |
+SPT 4.1 runs on **.NET 10**, and .NET does not roll forward across major versions - anything loaded by the
+server must be net10, and the Updater must be net10 or it won't start on a clean 4.1 install. The BepInEx
+side stays on net472 because that is what the Unity/Mono client loads.
+
+| Project | What it is | Target |
 |---|---|---|
-| `ModSync/` | BepInEx client plugin (.NET 4.7.2) | Same target, references updated for SPT 4 DLLs at `D:\SPTarkov4.0\BepInEx\plugins\spt\` |
-| `ModSync.Server/` | **TypeScript** mod for SPT 3.x server | **Rewrite to C#** against `SPTarkov.Server.Core` (SPT 4's new C# server). Use `..\server-mod-examples\` as pattern reference. |
-| `ModSync.Updater/` | Standalone .NET 8 WinForms exe | Bumped to **net9.0-windows**. Signing currently uses `Corter-Signing.snk` which we don't have - needs replacing or disabling. |
-| `ModSync.HashTester/` | .NET 8 console | Bumped to **net9.0**. |
-| `ModSync.MetroHash/` | Rust crate (native hash lib) | Probably untouched. |
-| `ModSync.Tests/` | NUnit on .NET 8 | Bumped to **net9.0**. Server-side tests now exist in `ModSync.Server.Tests/` (also net9.0). |
-| `ModSync.Utility/` | Shared projitems | May survive or be folded into the server rewrite. |
+| `ModSync/` | BepInEx client plugin | `net472`. Builds against the SPT/EFT DLLs vendored in `References/`. |
+| `ModSync.Server/` | SPT server mod, C# (was TypeScript on SPT 3.x) | `net10.0`, against `SPTarkov.Server.Core` |
+| `ModSync.Patcher/` | BepInEx preloader patcher, applies staged updates on headless | `net472` |
+| `ModSync.Updater/` | Standalone WinForms exe | `net10.0-windows`. Signing referenced `Corter-Signing.snk`, which we don't have. |
+| `ModSync.HashTester/` | Console harness for the hashers | `net10.0` |
+| `ModSync.MetroHash/` | Rust crate (native hash lib) | untouched by the port |
+| `ModSync.Tests/` | NUnit, client-side | `net10.0` |
+| `ModSync.Server.Tests/` | NUnit, server-side | `net10.0` |
+| `ModSync.Utility/` | Shared `.projitems`, compiled into both sides | follows its host project |
+
+⚠ `Corter-ModSync.sln` **cannot be built as a whole on this Linux host** - `ModSync.Updater` is
+`net10.0-windows` and fails with `NETSDK1100: To build a project targeting Windows on this operating
+system`. Build `ModSync.Server.csproj` on its own and run the two test projects; that covers everything
+Linux can check, and CI (Windows) covers the rest.
 
 ## Reference dirs (sibling to this repo)
 
 - `..\_spt_decompile\SPTarkov.Server.Core.decompiled.cs` - decompiled SPT 4 server. Look here for service names, DI tokens, method signatures.
 - `..\server-mod-examples\` - official SPT 4 server-mod examples (24 mods). Pattern reference for the C# server rewrite.
 
-## SPT install for reference (DO NOT modify)
+## Build-time reference DLLs
 
-`D:\SPTarkov4.0\` - read-only reference. Key paths:
-- `BepInEx\plugins\spt\` - `spt-common.dll`, `spt-core.dll` (new in SPT 4), `spt-custom.dll`, `spt-debugging.dll`, `spt-reflection.dll`, `spt-singleplayer.dll`
-- `EscapeFromTarkov_Data\Managed\` - EFT assemblies (Assembly-CSharp.dll, UnityEngine.*, Comfort, Newtonsoft.Json, etc.)
-- `SPT\` - SPT-specific server stuff
+The client plugin builds against the DLLs vendored in `References/`, not against a live game install.
+**`References/README.md` is the authoritative record** of where each one came from and when it was last
+refreshed - read it before touching them. Current state: the four `spt-*.dll` come from the SPT **4.1.1**
+release archive, `Assembly-CSharp.dll` is Fika-Plugin's hollowed 4.1-era copy (EFT build 40743), and the
+Unity/BSG/Newtonsoft set tracks the game build rather than the SPT version, so it usually survives an SPT
+bump untouched.
+
+Path note: SPT 4.1 **renamed the server folder from `SPT/` to `SPT_Runtime/`** inside the game root. Every
+path in `config.jsonc` is relative to that folder, so configs carry over between the lines untouched - but
+anything that hardcodes the folder name is a bug. See `ModSync.Server/PathExt.cs`, which derives it from
+the server's working directory for exactly this reason.
 
 ## Code style preferences
 
@@ -50,8 +71,8 @@ In scope. FIKA 4.x exists (Fika-Plugin v2.2.6, separate `Fika-Server-CSharp` rep
 
 ## Build & test
 
-- **CI (`ci.yml`) runs on `windows-latest`** - every push to `SPT4.0.x` runs `Build` + `Run client tests` (`ModSync.Tests`) + `Run server tests` (`ModSync.Server.Tests`). **CI is the authoritative correctness gate; it matches the real target (the BepInEx client is Windows-only).** Local runs are still worth doing for fast iteration - see below.
-- On this Linux host the working SDK is **.NET 9 at `/home/ubuntu/.dotnet/dotnet`** (plain `dotnet` is an 8.0-only system install that can't build net9). Build OOMs on default parallelism - use `MSBUILDDISABLENODEREUSE=1 ... -m:1 -p:BuildInParallel=false`.
+- **CI (`ci.yml`) runs on `windows-latest`** - every push to `SPT4.0.x` **or `SPT4.1.x`** runs `Build` + `Run client tests` (`ModSync.Tests`) + `Run server tests` (`ModSync.Server.Tests`). **CI is the authoritative correctness gate; it matches the real target (the BepInEx client is Windows-only).** Local runs are still worth doing for fast iteration - see below.
+- On this Linux host the working SDK is **.NET 10 at `/home/ubuntu/.dotnet/dotnet`** (plain `dotnet` is an 8.0-only system install and cannot build net10). Build OOMs on default parallelism - use `MSBUILDDISABLENODEREUSE=1 ... -m:1 -p:BuildInParallel=false`.
 
 ### Running tests on this host
 
@@ -98,7 +119,7 @@ Stopping the SPT stack is **not** required to build or test (that was a misdiagn
 ## Releasing
 
 `release.yml` is **tag-triggered** (`v*`); tagging only builds + publishes the zip, it does NOT re-run tests - so **CI must be green on the branch HEAD before you tag.** Steps:
-1. Push changes to `SPT4.0.x`, wait for CI green.
+1. Push changes to `SPT4.1.x`, wait for CI green.
 2. Bump the version in **all five places** - missing one isn't fatal but shows up in logs as the wrong build (e.g. `Loaded 1 patcher method from [Corter-ModSync-Prepatch 0.12.5.0]` after a 0.12.6 deploy):
    - `ModSync.Server/ModSyncMod.cs` - `Version`
    - `ModSync/Properties/AssemblyInfo.cs` - `AssemblyVersion` + `AssemblyFileVersion`
@@ -106,7 +127,8 @@ Stopping the SPT stack is **not** required to build or test (that was a misdiagn
    - `ModSync.Patcher/ModSync.Patcher.csproj` - `Version` + `AssemblyVersion` + `FileVersion`
    - `ModSync.Updater/ModSync.Updater.csproj` - `Version`
 
-   Verify with: `grep -rn "0\.12\.[0-9]" --include=*.cs --include=*.csproj . | grep -viE "/bin/|/obj/|test"`
+   Verify with: `grep -rn "0\.13\.[0-9]" --include=*.cs --include=*.csproj . | grep -viE "/bin/|/obj/|test"`
+   (the 4.1 line is versioned `0.13.x`; the 4.0 line is `0.12.x`, and the major tracks the SPT line)
 
    Then update the `release.yml` body (see its "UPDATE BEFORE TAGGING" note).
 3. `git tag vX.Y.Z && git push --tags` (use `-preN` suffix for a pre-release trial). Release workflow attaches the zip.
