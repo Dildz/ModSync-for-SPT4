@@ -3,12 +3,12 @@ using ModSync.Utility;
 namespace ModSync.Server.Test;
 
 /// <summary>
-/// Tests for ConfigUtil.LoadAsync — config file creation, loading, built-in syncpath
+/// Tests for ConfigUtil.LoadAsync - config file creation, loading, built-in syncpath
 /// injection, object-form parsing, and validation.
 /// Ported from the original TypeScript config.test.ts "ConfigUtil" describe block.
 ///
 /// LoadAsync resolves config.jsonc from the directory containing the server assembly.
-/// In tests that directory is the test output bin — we write our test config there
+/// In tests that directory is the test output bin - we write our test config there
 /// and clean up in TearDown.
 /// </summary>
 [TestFixture]

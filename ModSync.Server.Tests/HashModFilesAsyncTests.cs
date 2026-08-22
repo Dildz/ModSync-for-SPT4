@@ -3,7 +3,7 @@ using ModSync.Utility;
 namespace ModSync.Server.Test;
 
 /// <summary>
-/// Tests for SyncUtil.HashModFilesAsync — the routing logic that decides which files
+/// Tests for SyncUtil.HashModFilesAsync - the routing logic that decides which files
 /// reach which client type. Uses real temp directories with real files.
 ///
 /// New tests covering our headless and managedIncludes additions (no TS equivalent).
@@ -83,7 +83,7 @@ public class HashModFilesAsyncTests
         File.WriteAllText(Path.Combine(_pluginsDir, "SAIN.dll"), "content");
         File.WriteAllText(Path.Combine(_pluginsDir, "Fika.Headless.dll"), "content");
 
-        // Headless allowlist only includes SAIN.dll — Fika.Headless.dll should be excluded
+        // Headless allowlist only includes SAIN.dll - Fika.Headless.dll should be excluded
         var config = MakeConfig(headlessIncludes: [Path.Combine(_pluginsDir, "SAIN.dll")]);
         var syncUtil = MakeSyncUtil(config);
 
@@ -97,7 +97,7 @@ public class HashModFilesAsyncTests
             [new SyncPath("../BepInEx/plugins")],
             isHeadless: true);
 
-        // Empty result expected — "../BepInEx/plugins" doesn't exist on disk in tests,
+        // Empty result expected - "../BepInEx/plugins" doesn't exist on disk in tests,
         // so GetFilesInDir warns and yields nothing. What we validated: the plumbing runs.
         Assert.That(result.ContainsKey(@"..\BepInEx\plugins"), Is.True);
     }
@@ -106,7 +106,7 @@ public class HashModFilesAsyncTests
     public void HeadlessRequest_ExclusionOverride_AllowlistedFileReachesHeadless()
     {
         // Core behavior: a file in BOTH exclusions AND headlessIncludes must reach headless.
-        // This is the bug fixed in commit a662796 — headless plugins bypass exclusions.
+        // This is the bug fixed in commit a662796 - headless plugins bypass exclusions.
         File.WriteAllText(Path.Combine(_pluginsDir, "Fika.Headless.dll"), "content");
 
         // Fika.Headless.dll is excluded from players but allowlisted for headless
@@ -118,7 +118,7 @@ public class HashModFilesAsyncTests
         var syncUtil = MakeSyncUtil(config);
 
         // Use "../BepInEx/plugins" as the syncpath path so IsPluginsScoped returns true,
-        // but point it at our temp dir by placing temp files there and changing CWD — or
+        // but point it at our temp dir by placing temp files there and changing CWD - or
         // more pragmatically: test GetFilesInDir directly, which is where skipExclusions lives.
         // HashModFilesAsync drives GetFilesInDir with skipExclusions=true for headless+plugins.
         // We verify that behavior through GetFilesInDir tests; here we confirm Config is wired correctly.
@@ -163,7 +163,7 @@ public class HashModFilesAsyncTests
             managedIncludes: ["Unity.VectorGraphics.dll"],
             headlessManagedIncludes: []);
 
-        // Headless gets its own separate list — a file in the player list doesn't auto-reach headless
+        // Headless gets its own separate list - a file in the player list doesn't auto-reach headless
         Assert.Multiple(() =>
         {
             Assert.That(config.IsManagedAllowed("Unity.VectorGraphics.dll"), Is.True);
@@ -177,7 +177,7 @@ public class HashModFilesAsyncTests
     public async Task DisabledOverride_UnderCatchAll_FilesNotServed()
     {
         // A mod folder that sits INSIDE the catch-all, declared as a disabled
-        // (opt-in, unticked) override. Its files must NOT be served — not via the
+        // (opt-in, unticked) override. Its files must NOT be served - not via the
         // catch-all, and not under its own key. Regression for the bug where an
         // optional path toggled off still syncs because the catch-all re-claims it.
         File.WriteAllText(Path.Combine(_pluginsDir, "OtherMod.dll"), "x");
@@ -215,7 +215,7 @@ public class HashModFilesAsyncTests
         // ModSync's own plugin syncpath is enforced=true. Enforced paths must always reach
         // headless even if the admin forgot to add them to headlessIncludes.
         // IsPluginsScoped("../BepInEx/plugins/Corter-ModSync") returns true, but enforced=true
-        // means applyHeadlessPluginsAllowlist = false — so the allowlist gate is skipped.
+        // means applyHeadlessPluginsAllowlist = false - so the allowlist gate is skipped.
         var config = MakeConfig(headlessIncludes: []); // empty allowlist
         var syncUtil = MakeSyncUtil(config);
 

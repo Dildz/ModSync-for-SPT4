@@ -7,7 +7,7 @@ using SyncPathModFiles = System.Collections.Generic.Dictionary<string, System.Co
 
 /// <summary>
 /// PreviousSync.json is the record of what the server last offered, and it is the ONLY thing
-/// that licenses ModSync to remove a file — a path with no entry can never have anything
+/// that licenses ModSync to remove a file - a path with no entry can never have anything
 /// removed under it.
 ///
 /// A self-update run sees nothing but ModSync's own components, so writing that result
@@ -43,7 +43,7 @@ public class MergePreviousSyncTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(merged, Has.Count.EqualTo(3), "mod paths were dropped — removals would silently stop working");
+            Assert.That(merged, Has.Count.EqualTo(3), "mod paths were dropped - removals would silently stop working");
             Assert.That(merged, Does.ContainKey(@"BepInEx\plugins"));
             Assert.That(merged, Does.ContainKey(@"BepInEx\plugins\DynamicMaps"));
         });
@@ -61,7 +61,7 @@ public class MergePreviousSyncTests
         {
             Assert.That(merged[@"BepInEx\plugins\Corter-ModSync"], Does.ContainKey("new.dll"));
             Assert.That(merged[@"BepInEx\plugins\Corter-ModSync"], Does.Not.ContainKey("old.dll"),
-                "a covered path must be REPLACED, not union'd — stale files would linger in the record forever");
+                "a covered path must be REPLACED, not union'd - stale files would linger in the record forever");
         });
     }
 

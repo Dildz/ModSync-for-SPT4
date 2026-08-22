@@ -1,7 +1,7 @@
 namespace ModSync.Server.Test;
 
 /// <summary>
-/// Tests for ConfigUtil.MissingTopLevelOptions — the boot-time advisory that names config
+/// Tests for ConfigUtil.MissingTopLevelOptions - the boot-time advisory that names config
 /// options an admin's file predates.
 ///
 /// An existing config.jsonc is NEVER overwritten, so without this a newly added top-level
@@ -69,7 +69,7 @@ public class MissingOptionsNotifyTests
     [Test]
     public void ExtraKeysTheAdminAdded_AreNotReported()
     {
-        // We only report what the DEFAULTS have and they don't — never the reverse. An admin's
+        // We only report what the DEFAULTS have and they don't - never the reverse. An admin's
         // own stray key is their business, and nagging about it would be noise.
         var withExtra = """
             {

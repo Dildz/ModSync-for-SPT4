@@ -1,4 +1,4 @@
-# Release pipeline — triggered when a git tag matching `v*` is pushed.
+# Release pipeline - triggered when a git tag matching `v*` is pushed.
 #
 # Tag a commit (e.g. `git tag v0.11.1-pre1 && git push --tags`) and GitHub Actions
 # will: build the whole solution, run the unit tests, stage the binaries into the
@@ -58,10 +58,10 @@ jobs:
         # + Newtonsoft.Json.dll). Publishing bundles them all into one ~1.6MB .exe.
         #
         # `--no-self-contained` keeps it framework-dependent, avoiding ~60MB of bundled
-        # runtime bloat — which matters here because ModSync syncs this .exe to every client.
+        # runtime bloat - which matters here because ModSync syncs this .exe to every client.
         # It relies on users having the .NET 10 runtime, which SPT 4.1 itself requires:
         # SPT.Server.runtimeconfig.json asks for Microsoft.NETCore.App 10.0.0. That's why the
-        # Updater must stay on the same major as SPT — .NET does not roll forward across
+        # Updater must stay on the same major as SPT - .NET does not roll forward across
         # majors, so a net9 build would refuse to start on a clean 4.1 install.
         run: dotnet publish ModSync.Updater/ModSync.Updater.csproj -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true --no-restore --nologo
 
@@ -96,14 +96,14 @@ jobs:
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll"        "$stage/BepInEx/plugins/Corter-ModSync/"
           Copy-Item "ModSync/bin/Release/net472/Corter-ModSync.dll.config" "$stage/BepInEx/plugins/Corter-ModSync/"
 
-          # Preloader patcher — applies PendingUpdates before plugin DLLs are loaded
+          # Preloader patcher - applies PendingUpdates before plugin DLLs are loaded
           Copy-Item "ModSync.Patcher/bin/Release/net472/Corter-ModSync-Prepatch.dll" "$stage/BepInEx/patchers/"
 
           # Server mod + default config (bundled so admins can edit before first run)
           Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT_Runtime/user/mods/Corter-ModSync/"
-          # (config.jsonc intentionally not staged — see the layout note above)
+          # (config.jsonc intentionally not staged - see the layout note above)
 
-          # Updater — single-file output from the publish step above. Just the .exe
+          # Updater - single-file output from the publish step above. Just the .exe
           # (~1.6MB) with Newtonsoft.Json, deps.json, and runtimeconfig.json all bundled in.
           Copy-Item "ModSync.Updater/bin/Release/net10.0-windows/win-x64/publish/ModSync.Updater.exe" "$stage/"
 
@@ -121,34 +121,34 @@ jobs:
         with:
           files: "Corter-ModSync-${{ github.ref_name }}.zip"
           # Tags containing "-pre" (e.g. v0.11.1-pre1) are marked as pre-release on
-          # GitHub — they don't show up in the "Latest" link, and users get a warning.
+          # GitHub - they don't show up in the "Latest" link, and users get a warning.
           prerelease: ${{ contains(github.ref_name, '-pre') || contains(github.ref_name, '-rc') }}
           # Auto-generate changelog from PR/commit history between this tag and the previous one.
           generate_release_notes: true
           # Release title. Without this the release is titled with the bare tag, which says
-          # nothing about which SPT it targets — and both version lines (SPT4.0.x / SPT4.1.x)
+          # nothing about which SPT it targets - and both version lines (SPT4.0.x / SPT4.1.x)
           # publish into this one `v*` tag namespace, so the tag alone is genuinely ambiguous.
           name: "Corter ModSync ${{ github.ref_name }} (SPT 4.1.x)"
           # !!! UPDATE THE BODY BELOW BEFORE TAGGING A NEW RELEASE !!!
-          # This text is baked into every release page verbatim — a stale body means the
+          # This text is baked into every release page verbatim - a stale body means the
           # release ships with the PREVIOUS version's changelog (happened on v0.12.4).
           body: |
             ## Requires SPT 4.1.x
 
-            Built against **SPT 4.1.1** and declared as `~4.1.0`, so it loads on any 4.1.x — verified running on **4.1.2**. It will not load on SPT 4.0.x: the 4.1 server checks which `SPTarkov.Server.Core` a mod was compiled against and refuses to load it on a mismatch.
+            Built against **SPT 4.1.1** and declared as `~4.1.0`, so it loads on any 4.1.x - verified running on **4.1.2**. It will not load on SPT 4.0.x: the 4.1 server checks which `SPTarkov.Server.Core` a mod was compiled against and refuses to load it on a mismatch.
 
-            **Still on SPT 4.0.x?** Stay on [v0.12.6](https://github.com/Dildz/ModSync-for-SPT4/releases/tag/v0.12.6). That line is still supported on the `SPT4.0.x` branch — both versions get fixes.
+            **Still on SPT 4.0.x?** Stay on [v0.12.6](https://github.com/Dildz/ModSync-for-SPT4/releases/tag/v0.12.6). That line is still supported on the `SPT4.0.x` branch - both versions get fixes.
 
             ## Changes
 
-            - **SPT 4.1 support.** The server mod is ported to the 4.1 API: `IPreSptLoadModAsync` was removed (it's `IOnLoad` + `OnLoadAsync` now), `IHttpListener` changed shape, and log colours moved from `LogTextColor` to Spectre. No config changes are needed — your `config.jsonc` carries over as-is.
+            - **SPT 4.1 support.** The server mod is ported to the 4.1 API: `IPreSptLoadModAsync` was removed (it's `IOnLoad` + `OnLoadAsync` now), `IHttpListener` changed shape, and log colours moved from `LogTextColor` to Spectre. No config changes are needed - your `config.jsonc` carries over as-is.
             - **The server mod now installs to `SPT_Runtime/user/mods/`.** SPT 4.1 renamed its server folder from `SPT/` to `SPT_Runtime/`, and the zip follows. Extract into your game root exactly as before. Client-side paths (`BepInEx/`, the Updater at the game root) are unchanged.
-            - **Everything targets .NET 10 now, including `ModSync.Updater.exe`.** SPT 4.1 runs on .NET 10, and .NET doesn't roll forward across major versions — a .NET 9 Updater would simply refuse to start on a clean 4.1 install.
-            - **Fix: mods that ADD files outside their own folder are now uninstalled properly.** `baseFiles` assumed a mod always *replaces* a base-game file, so it treated "no `.modsync-bak`" as proof the file belonged to the game and refused to delete it. Mods that add a file instead of replacing one — DynamicMaps ships two Unity assemblies EFT doesn't have — left those files behind when removed, and their F12 entry locked itself so it couldn't be re-ticked either. Removal now keys off the backup alone: a `.modsync-bak` means restore the original, no backup means the mod added the file, so it's removed like anything else. Mods that genuinely replace a file (Tarkov DLSS's `nvngx_dlss.dll`) are unaffected — they still get a backup and still restore on opt-out.
+            - **Everything targets .NET 10 now, including `ModSync.Updater.exe`.** SPT 4.1 runs on .NET 10, and .NET doesn't roll forward across major versions - a .NET 9 Updater would simply refuse to start on a clean 4.1 install.
+            - **Fix: mods that ADD files outside their own folder are now uninstalled properly.** `baseFiles` assumed a mod always *replaces* a base-game file, so it treated "no `.modsync-bak`" as proof the file belonged to the game and refused to delete it. Mods that add a file instead of replacing one - DynamicMaps ships two Unity assemblies EFT doesn't have - left those files behind when removed, and their F12 entry locked itself so it couldn't be re-ticked either. Removal now keys off the backup alone: a `.modsync-bak` means restore the original, no backup means the mod added the file, so it's removed like anything else. Mods that genuinely replace a file (Tarkov DLSS's `nvngx_dlss.dll`) are unaffected - they still get a backup and still restore on opt-out.
 
             ## Upgrade notes
 
-            Unzip into your game root as usual — clients update themselves via sync, no manual steps.
+            Unzip into your game root as usual - clients update themselves via sync, no manual steps.
 
             Your `config.jsonc` is untouched and needs no changes for 4.1.
 
@@ -164,5 +164,5 @@ jobs:
 
             ## Docs
 
-            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#mods-that-replace-base-game-files) — how `baseFiles` backs up and restores originals. Note the wiki documents the 4.0.x line; the removal behaviour described above is 4.1-only for now.
-            - [Usage Examples](https://github.com/Dildz/ModSync-for-SPT4/wiki/UsageExamples) — worked `config.jsonc` setups, from minimal to a real server
+            - [Mods that replace base-game files](https://github.com/Dildz/ModSync-for-SPT4/wiki/Configuration#mods-that-replace-base-game-files) - how `baseFiles` backs up and restores originals. Note the wiki documents the 4.0.x line; the removal behaviour described above is 4.1-only for now.
+            - [Usage Examples](https://github.com/Dildz/ModSync-for-SPT4/wiki/UsageExamples) - worked `config.jsonc` setups, from minimal to a real server

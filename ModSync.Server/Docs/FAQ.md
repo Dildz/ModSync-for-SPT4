@@ -41,16 +41,16 @@ A: [Check out the documentation for configuring Sync Paths](Configuration#syncpa
 A: Go ahead and review the [documentation for how ModSync works](How-Sync-Works#updated-files). If you want the behavior you're describing, take a peek at [`enforced option`](Configuration#options).
 
 ### Q: I'm using the Fika headless client. Can I use ModSync with it?
-A: Yes — ModSync has first-class support for headless. When a headless client connects, the server serves only the plugins listed in [`headlessIncludes`](Configuration#headlessincludes) rather than the full plugin list. This lets you deliver exactly the bot-AI and Fika DLLs the headless needs without sending GPU-side mods it can't use.
+A: Yes - ModSync has first-class support for headless. When a headless client connects, the server serves only the plugins listed in [`headlessIncludes`](Configuration#headlessincludes) rather than the full plugin list. This lets you deliver exactly the bot-AI and Fika DLLs the headless needs without sending GPU-side mods it can't use.
 
 On the headless side, ModSync stages updates to `ModSync_Data/PendingUpdates` and then quits. A [BepInEx preloader patcher](How-Sync-Works#headless-clients) applies those updates on the next boot before any plugin DLLs are loaded into memory, avoiding the locked-file errors that would otherwise cause an infinite re-sync loop.
 
 See the [`headlessIncludes` configuration docs](Configuration#headlessincludes) for setup details.
 
 ### Q: Do I need `ModSync.Updater.exe` on my headless client? Can I remove it?
-A: Headless clients never run the Updater — they apply updates with the [preloader patcher](How-Sync-Works#headless-clients) instead. By default the Updater still syncs to headless as harmless dead weight. If you want a leaner headless install, add `ModSync.Updater.exe` to that install's `ModSync_Data/Exclusions.jsonc` and ModSync removes it on the next sync. The reverse holds for players and the patcher — add `BepInEx/patchers/Corter-ModSync-Prepatch.dll` to a player's `Exclusions.jsonc`. See [trimming ModSync's own components](Configuration#trimming-modsyncs-own-components-optional).
+A: Headless clients never run the Updater - they apply updates with the [preloader patcher](How-Sync-Works#headless-clients) instead. By default the Updater still syncs to headless as harmless dead weight. If you want a leaner headless install, add `ModSync.Updater.exe` to that install's `ModSync_Data/Exclusions.jsonc` and ModSync removes it on the next sync. The reverse holds for players and the patcher - add `BepInEx/patchers/Corter-ModSync-Prepatch.dll` to a player's `Exclusions.jsonc`. See [trimming ModSync's own components](Configuration#trimming-modsyncs-own-components-optional).
 
-ModSync won't let you trim the *wrong* one: a player can't exclude the Updater and a headless can't exclude the patcher, since each is enforced on the side that needs it. Note the **server** must always keep **all** ModSync files (including the Updater) so it can serve and update them to clients — that requirement never changes; the trimming is per-client only.
+ModSync won't let you trim the *wrong* one: a player can't exclude the Updater and a headless can't exclude the patcher, since each is enforced on the side that needs it. Note the **server** must always keep **all** ModSync files (including the Updater) so it can serve and update them to clients - that requirement never changes; the trimming is per-client only.
 
 ### Q: I'm getting an error when using ModSync, what do I do?
 A: Go ahead and post a message in the [ModSync thread on the FIKA discord server](https://discord.com/channels/1202292159366037545/1249759503516434473) **with your `user/logs/server-YEAR-MONTH-DAY.log`, `BepInEx/LogOutput.log`, and `ModSync_Data/ModSync.log`**,

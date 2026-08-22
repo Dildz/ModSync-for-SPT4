@@ -88,7 +88,7 @@ Another simple comparison, created directories are found by comparing folders pr
 
 ## Downloading Updates
 
-During this stage, ModSync will download any added/updated files 2 at a time. (Upstream used 8; this fork lowered it because slow uplinks combined with Mono's TLS stack proved fragile under heavy concurrency — handshakes timed out and retry storms didn't recover. A shared `HttpClient` keeps the TCP/TLS sessions warm, so 2 is plenty.) These files are downloaded into the `ModSync_Data/PendingUpdates` directory with the notable exception of sync paths configured with `"restartRequired": false` and created empty directories. These
+During this stage, ModSync will download any added/updated files 2 at a time. (Upstream used 8; this fork lowered it because slow uplinks combined with Mono's TLS stack proved fragile under heavy concurrency - handshakes timed out and retry storms didn't recover. A shared `HttpClient` keeps the TCP/TLS sessions warm, so 2 is plenty.) These files are downloaded into the `ModSync_Data/PendingUpdates` directory with the notable exception of sync paths configured with `"restartRequired": false` and created empty directories. These
 are placed directly into the client's SPT installation.
 
 > [!NOTE]
@@ -113,16 +113,16 @@ ModSync launches the ModSync Updater (`ModSync.Updater.exe`). This helper progra
 
 The Updater cannot run on headless because it requires a Windows UI and the EFT executable to relaunch. Instead:
 
-1. The ModSync plugin stages all downloaded files into `ModSync_Data/PendingUpdates` as normal, then **quits immediately** — no in-process apply is attempted.
-2. On the next boot, the **BepInEx preloader patcher** (`Corter-ModSync-Prepatch.dll`) runs before any plugin DLLs are loaded into memory. It moves all pending updates into their final locations and restores any `.modsync-bak` backup files for removed managed DLLs. Each file is applied independently — if one file fails, the rest still apply and only the failed file is retried on the next boot.
+1. The ModSync plugin stages all downloaded files into `ModSync_Data/PendingUpdates` as normal, then **quits immediately** - no in-process apply is attempted.
+2. On the next boot, the **BepInEx preloader patcher** (`Corter-ModSync-Prepatch.dll`) runs before any plugin DLLs are loaded into memory. It moves all pending updates into their final locations and restores any `.modsync-bak` backup files for removed managed DLLs. Each file is applied independently - if one file fails, the rest still apply and only the failed file is retried on the next boot.
 3. Once the patcher finishes, BepInEx loads plugins normally with all updates already in place.
 
 This two-step approach avoids the locked-file errors that would occur if the plugin tried to overwrite DLLs that are already loaded in memory.
 
 > [!NOTE]
-> The patcher logs everything it does to `ModSync_Data/ModSync.log` — the same file the Windows Updater writes. Unlike `BepInEx/LogOutput.log`, which is overwritten on every boot, this file persists across restarts, making it the first place to check when diagnosing update problems on headless.
+> The patcher logs everything it does to `ModSync_Data/ModSync.log` - the same file the Windows Updater writes. Unlike `BepInEx/LogOutput.log`, which is overwritten on every boot, this file persists across restarts, making it the first place to check when diagnosing update problems on headless.
 
-One category of file *is* still locked when the patcher runs: preloader patcher DLLs themselves, since BepInEx loads all of them into memory before running any of them. A locked DLL can't be overwritten or deleted, but it *can* be renamed — so the patcher renames the old copy to `*.modsync-old`, puts the new file in its place, and deletes the leftover on the next boot. If you spot a `.modsync-old` file in your `BepInEx` folders, that's this mechanism mid-cycle — it cleans itself up automatically, no action needed.
+One category of file *is* still locked when the patcher runs: preloader patcher DLLs themselves, since BepInEx loads all of them into memory before running any of them. A locked DLL can't be overwritten or deleted, but it *can* be renamed - so the patcher renames the old copy to `*.modsync-old`, puts the new file in its place, and deletes the leftover on the next boot. If you spot a `.modsync-old` file in your `BepInEx` folders, that's this mechanism mid-cycle - it cleans itself up automatically, no action needed.
 
 # Alternative Workflows
 
@@ -165,10 +165,10 @@ is ignored entirely for files in an enforced path.
 ModSync enforces its own files differently depending on who's connecting, so a client can't accidentally break its own update mechanism:
 
 - The **Updater** (`ModSync.Updater.exe`) is enforced for **desktop players** (who run it) and *not* enforced for **headless** (which never does).
-- The **patcher** (`Corter-ModSync-Prepatch.dll`) is the reverse — enforced for **headless** (which applies updates with it) and *not* enforced for **players**.
+- The **patcher** (`Corter-ModSync-Prepatch.dll`) is the reverse - enforced for **headless** (which applies updates with it) and *not* enforced for **players**.
 - The **plugin** is always enforced for everyone.
 
-Because enforced paths ignore local exclusions, a player can't exclude the Updater and a headless can't exclude the patcher — but each *can* trim the component it doesn't run via [`Exclusions.jsonc`](Configuration#exclusionsjsonc). The server resolves this per request using the same `?headless=1` flag it uses for plugin filtering. Note the **server** always keeps all three files so it can serve and update them to clients — this trimming is per-client only.
+Because enforced paths ignore local exclusions, a player can't exclude the Updater and a headless can't exclude the patcher - but each *can* trim the component it doesn't run via [`Exclusions.jsonc`](Configuration#exclusionsjsonc). The server resolves this per request using the same `?headless=1` flag it uses for plugin filtering. Note the **server** always keeps all three files so it can serve and update them to clients - this trimming is per-client only.
 
 ## Headless Clients
 
@@ -176,9 +176,9 @@ When a headless client connects, ModSync uses modified sync behavior throughout:
 
 ### Plugin filtering
 
-The server detects headless clients via a `?headless=1` query parameter that the plugin appends when the `Fika.Headless` plugin is loaded. For the `../BepInEx/plugins` scope, the server only returns hashes for files listed in [`headlessIncludes`](Configuration#headlessincludes) — the full plugin list is never exposed to headless. Patchers and config pass through unfiltered (minus global exclusions).
+The server detects headless clients via a `?headless=1` query parameter that the plugin appends when the `Fika.Headless` plugin is loaded. For the `../BepInEx/plugins` scope, the server only returns hashes for files listed in [`headlessIncludes`](Configuration#headlessincludes) - the full plugin list is never exposed to headless. Patchers and config pass through unfiltered (minus global exclusions).
 
-This means a headless client will only ever download the bot-AI and Fika DLLs you explicitly allow — it will never accidentally pull down UI mods or GPU-side plugins it can't use.
+This means a headless client will only ever download the bot-AI and Fika DLLs you explicitly allow - it will never accidentally pull down UI mods or GPU-side plugins it can't use.
 
 ### Update application
 

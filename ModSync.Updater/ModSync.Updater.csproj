@@ -20,7 +20,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <!-- Shared MAX_PATH helper — link just this one file (the Updater doesn't need the rest of Utility). -->
+      <!-- Shared MAX_PATH helper - link just this one file (the Updater doesn't need the rest of Utility). -->
       <Compile Include="..\ModSync.Utility\LongPath.cs" />
     </ItemGroup>
 

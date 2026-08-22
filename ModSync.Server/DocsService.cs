@@ -8,7 +8,7 @@ namespace ModSync.Server;
 /// One documentation page: the id used in the URL, the title shown in the nav, and the
 /// rendered HTML.
 ///
-/// `record` again (see ModSyncMod.cs) — a plain immutable data carrier, so we get value
+/// `record` again (see ModSyncMod.cs) - a plain immutable data carrier, so we get value
 /// equality and a short declaration for free. The parameters in brackets are a "primary
 /// constructor": they become public properties automatically.
 /// </summary>
@@ -19,14 +19,14 @@ public record DocPage(string Id, string Title, string Html);
 ///
 /// The markdown lives in Docs/ and is compiled INTO the DLL as an embedded resource (see the
 /// EmbeddedResource item in the csproj), rather than shipped as loose files. That means the
-/// docs can never be missing, half-updated, or edited into a broken state on a live server —
+/// docs can never be missing, half-updated, or edited into a broken state on a live server -
 /// they are the same bytes that passed CI.
 ///
 /// Rendering happens once on first use and is then cached: the markdown cannot change while
 /// the server is running, so re-parsing it per page view would be pure waste.
 ///
 /// `[Injectable(InjectionType.Singleton)]` registers this with SPT's DI container as a single
-/// shared instance, which is what makes the cache meaningful — a new instance per request
+/// shared instance, which is what makes the cache meaningful - a new instance per request
 /// would re-render every time.
 /// </summary>
 [Injectable(InjectionType.Singleton)]

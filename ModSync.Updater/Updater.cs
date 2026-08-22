@@ -11,11 +11,11 @@ public static class Updater
     /// <summary>
     /// Folders where a mod may OVERWRITE a base-game file. An existing file here is copied to
     /// .modsync-bak before being overwritten, so removal can put the original back.
-    ///   • Managed/          — Unity assemblies
-    ///   • Plugins/x86_64/   — native Unity plugins (Tarkov DLSS 4.5 replaces nvngx_dlss.dll)
+    ///   • Managed/          - Unity assemblies
+    ///   • Plugins/x86_64/   - native Unity plugins (Tarkov DLSS 4.5 replaces nvngx_dlss.dll)
     ///
     /// A mod that ADDS a file here rather than replacing one gets no backup, and is removed
-    /// like any other synced file — DynamicMaps ships two Unity assemblies EFT does not have.
+    /// like any other synced file - DynamicMaps ships two Unity assemblies EFT does not have.
     /// </summary>
     private static bool IsInProtectedBaseFolder(string path)
     {
@@ -82,9 +82,9 @@ public static class Updater
                 continue;
 
             // A .modsync-bak exists only where we overwrote a base-game file at install time,
-            // so it means "put the original back". Everything else is a file the mod ADDED —
+            // so it means "put the original back". Everything else is a file the mod ADDED -
             // including the Unity assemblies DynamicMaps drops into Managed/, which EFT does
-            // not ship — and is removed like any other synced file.
+            // not ship - and is removed like any other synced file.
             var bakPath = file + ".modsync-bak";
             if (File.Exists(bakPath))
             {

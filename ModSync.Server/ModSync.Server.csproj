@@ -3,7 +3,7 @@
   <!--
     SPT 4 server mods are .NET 9 class libraries that get loaded by the SPT server at startup.
     Pattern follows server-mod-examples + lessons from NarcoNet (PrivateAssets/ExcludeAssets on
-    SPT packages so they don't get copied to the mod output dir — SPT provides them at runtime).
+    SPT packages so they don't get copied to the mod output dir - SPT provides them at runtime).
 
     SDK is `Microsoft.NET.Sdk.Web` (not the bare `Microsoft.NET.Sdk`) because IHttpListener
     impls use ASP.NET Core types (HttpContext, HttpRequest, HttpResponse). The Web SDK adds
@@ -20,14 +20,14 @@
 
     <!--
       Output layout follows the official server-mod-examples convention:
-      bin/<Config>/<ProjectName>/<AssemblyName>/   — drops a clean mod folder you can copy into
+      bin/<Config>/<ProjectName>/<AssemblyName>/   - drops a clean mod folder you can copy into
       a real SPT install at user/mods/Corter-ModSync/ for testing.
     -->
     <OutputPath>bin\$(Configuration)\$(ProjectName)\$(AssemblyName)\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 
     <!--
-      Class libraries do NOT copy NuGet package assemblies to the output folder by default —
+      Class libraries do NOT copy NuGet package assemblies to the output folder by default -
       a normal app resolves them through deps.json at runtime, but a mod DLL is side-loaded by
       SPT and gets no such resolution. Without this, Markdig.dll is simply absent from the mod
       folder and the docs page throws FileNotFoundException the first time it renders.
@@ -90,7 +90,7 @@
   </ItemGroup>
 
   <!--
-    Shared utility code (MetroHash, ImoHash, Glob, ModFile, SyncPath) — same code the
+    Shared utility code (MetroHash, ImoHash, Glob, ModFile, SyncPath) - same code the
     BepInEx client uses. This is the killer benefit of doing both sides in C#: client
     and server compute byte-identical hashes from a single source.
   -->

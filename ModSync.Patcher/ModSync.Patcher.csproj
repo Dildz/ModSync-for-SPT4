@@ -11,21 +11,21 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Shared MAX_PATH helper — link just this one file (the patcher doesn't need the rest of Utility). -->
+    <!-- Shared MAX_PATH helper - link just this one file (the patcher doesn't need the rest of Utility). -->
     <Compile Include="..\ModSync.Utility\LongPath.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="BepInEx.Core" Version="5.*" />
     <!--
-      Mono.Cecil ships in BepInEx/core/ — available at preloader stage.
+      Mono.Cecil ships in BepInEx/core/ - available at preloader stage.
       Private="false": compile-time reference only, not copied to output.
     -->
     <PackageReference Include="Mono.Cecil" Version="0.11.*" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <!--
-    Newtonsoft.Json ships with EFT and with BepInEx — available at preloader stage.
+    Newtonsoft.Json ships with EFT and with BepInEx - available at preloader stage.
     Private="false": compile-time reference only, not copied to output.
   -->
   <ItemGroup>

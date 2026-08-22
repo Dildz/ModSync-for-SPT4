@@ -6,20 +6,20 @@ using System.IO;
 /// Windows MAX_PATH (260-character) workaround.
 ///
 /// The client plugin runs on .NET Framework 4.7.2, which enforces the legacy 260-char path
-/// limit (248 for directories). A deep SPT install combined with a deeply-nested mod — e.g. an
-/// addon that bundles its own <c>BepInEx/plugins/...</c> tree inside itself — can push a staged
+/// limit (248 for directories). A deep SPT install combined with a deeply-nested mod - e.g. an
+/// addon that bundles its own <c>BepInEx/plugins/...</c> tree inside itself - can push a staged
 /// download path past that, and <c>FileStream</c>/<c>Directory</c> ops then fail with
 /// <c>DirectoryNotFoundException</c>. Installs near the drive root stay under the limit, which is
 /// why only some users hit it.
 ///
 /// Prefixing a fully-qualified path with the extended-length marker <c>\\?\</c> tells the Win32
-/// API to skip MAX_PATH normalization, raising the effective limit to ~32,767 characters — no OS
+/// API to skip MAX_PATH normalization, raising the effective limit to ~32,767 characters - no OS
 /// registry change, app.config switch, or manifest entry required.
 ///
 /// **Cross-platform safety:** the marker is a Windows construct. On native Linux (the Docker
 /// headless client when not under Wine) it would corrupt the path, so we no-op there. We also
-/// only touch paths that actually approach the limit, leaving the common case — including every
-/// normal headless sync — byte-for-byte unchanged on every platform.
+/// only touch paths that actually approach the limit, leaving the common case - including every
+/// normal headless sync - byte-for-byte unchanged on every platform.
 /// </summary>
 public static class LongPath
 {
@@ -35,7 +35,7 @@ public static class LongPath
     public static string Extended(string path) => Extended(path, Path.DirectorySeparatorChar == '\\');
 
     /// <summary>
-    /// Testable core. <paramref name="windows"/> is whether this is a Windows-style filesystem —
+    /// Testable core. <paramref name="windows"/> is whether this is a Windows-style filesystem -
     /// true on real Windows and under Wine (where the Docker headless client runs), false on
     /// native Linux. Split out so the transform can be unit-tested deterministically regardless
     /// of the host OS.
@@ -61,7 +61,7 @@ public static class LongPath
         if (normalized.Length >= 2 && char.IsLetter(normalized[0]) && normalized[1] == ':')
             return @"\\?\" + normalized;
 
-        // Relative / non-rooted — can't safely prefix, leave it alone.
+        // Relative / non-rooted - can't safely prefix, leave it alone.
         return path;
     }
 }

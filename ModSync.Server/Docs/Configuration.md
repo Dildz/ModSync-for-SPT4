@@ -2,12 +2,12 @@
 
 ModSync has two configuration surfaces:
 
-1. **Server** `config.jsonc` — what the server walks, what to never sync, what reaches a Fika headless install, and which Unity Managed DLLs to push.
-2. **Each install's** `<game>/ModSync_Data/Exclusions.jsonc` — personal per-install opt-outs (player or headless).
+1. **Server** `config.jsonc` - what the server walks, what to never sync, what reaches a Fika headless install, and which Unity Managed DLLs to push.
+2. **Each install's** `<game>/ModSync_Data/Exclusions.jsonc` - personal per-install opt-outs (player or headless).
 
 Both files are created on first run with sensible defaults and a comment header you can hand-edit without consulting docs.
 
-- [How ModSync decides what you get](#how-modsync-decides-what-you-get) — **start here**
+- [How ModSync decides what you get](#how-modsync-decides-what-you-get) - **start here**
 - [Server](#server)
   - [`syncPaths`](#syncpaths)
     - [Options](#options)
@@ -28,7 +28,7 @@ Both files are created on first run with sensible defaults and a comment header 
 
 # How ModSync decides what you get
 
-**New here? Read this first — it's the whole model in one page.**
+**New here? Read this first - it's the whole model in one page.**
 
 ModSync isn't two competing systems. It's **one model with a dial**, and everything else is just how far you turn it.
 
@@ -36,39 +36,39 @@ ModSync isn't two competing systems. It's **one model with a dial**, and everyth
 
 Every file the server offers is governed by a **syncPath**. You choose how granular to be:
 
-- **Lazy end** — keep the three catch-all syncPaths (`../BepInEx/plugins`, `../BepInEx/patchers`, `../BepInEx/config`). Everything syncs by default; a player removes what they don't want on their own machine. Best for **large modsets** — zero per-mod setup.
-- **Curated end** — *also* name individual mods as objects and mark the extras `"enabled": false`. Those show up in each player's **F12 menu** as opt-in toggles. Best for **slim / choose-your-loadout sets** — players pick what they run.
-- **Anywhere between** — name only the handful you want optional; the catch-alls cover the rest. This is the sweet spot for most servers.
+- **Lazy end** - keep the three catch-all syncPaths (`../BepInEx/plugins`, `../BepInEx/patchers`, `../BepInEx/config`). Everything syncs by default; a player removes what they don't want on their own machine. Best for **large modsets** - zero per-mod setup.
+- **Curated end** - *also* name individual mods as objects and mark the extras `"enabled": false`. Those show up in each player's **F12 menu** as opt-in toggles. Best for **slim / choose-your-loadout sets** - players pick what they run.
+- **Anywhere between** - name only the handful you want optional; the catch-alls cover the rest. This is the sweet spot for most servers.
 
-There's no mode switch to flip. Adding a named override on top of the catch-alls just moves the dial — you can mix freely.
+There's no mode switch to flip. Adding a named override on top of the catch-alls just moves the dial - you can mix freely.
 
 ## The two player levers (one per end of the dial)
 
-However you set the dial, a **player** has one lever to decline a mod — and *which* lever depends on your style:
+However you set the dial, a **player** has one lever to decline a mod - and *which* lever depends on your style:
 
 | Your style                            | The player's lever                               | How it works                                    |
 | ------------------------------------- | ------------------------------------------------ | ----------------------------------------------- |
 | **Curated** (you named the mod) | the **F12 "Synced Paths" menu**             | tick / untick that mod's toggle                 |
 | **Lazy** (only catch-alls)      | their **`ModSync_Data/Exclusions.jsonc`** | add the file or glob to their personal denylist |
 
-Same idea, different granularity: the F12 menu is *admin-curated* choice (only the paths you exposed), the local `Exclusions.jsonc` is *player-arbitrary* choice (any file, no admin setup needed). The local file always works and layers on top, so a curated setup can still use it for one-off overrides — but you rarely need both.
+Same idea, different granularity: the F12 menu is *admin-curated* choice (only the paths you exposed), the local `Exclusions.jsonc` is *player-arbitrary* choice (any file, no admin setup needed). The local file always works and layers on top, so a curated setup can still use it for one-off overrides - but you rarely need both.
 
 > [!TIP]
-> If your players use the **F12 menu**, they do **not** also need to list those mods in `Exclusions.jsonc` — the toggle already handles it. Reaching for both levers at once is the single most common source of confusion.
+> If your players use the **F12 menu**, they do **not** also need to list those mods in `Exclusions.jsonc` - the toggle already handles it. Reaching for both levers at once is the single most common source of confusion.
 
 ## Headless is different: a recipe, not a menu
 
-A Fika **headless** client has no F12 menu, so it can't use opt-in toggles. Instead you set its contents centrally with [`headlessIncludes`](#headlessincludes) — an allowlist of the plugins headless should receive. Two consequences worth knowing:
+A Fika **headless** client has no F12 menu, so it can't use opt-in toggles. Instead you set its contents centrally with [`headlessIncludes`](#headlessincludes) - an allowlist of the plugins headless should receive. Two consequences worth knowing:
 
-- **Optional (`enabled: false`) paths never reach headless.** With no menu to tick, a headless client skips them. If headless *must* have a mod, either keep it on the (enabled) catch-all and list it in `headlessIncludes`, or `enforce` it — don't mark a headless-needed mod optional.
-- **Headless receives every config and patcher** regardless of `headlessIncludes` (which only gates plugins). Harmless — see the note under [`headlessIncludes`](#headlessincludes).
+- **Optional (`enabled: false`) paths never reach headless.** With no menu to tick, a headless client skips them. If headless *must* have a mod, either keep it on the (enabled) catch-all and list it in `headlessIncludes`, or `enforce` it - don't mark a headless-needed mod optional.
+- **Headless receives every config and patcher** regardless of `headlessIncludes` (which only gates plugins). Harmless - see the note under [`headlessIncludes`](#headlessincludes).
 
 ## Where to go next
 
-- [`syncPaths`](#syncpaths) — define what's synced and how (this is the dial).
-- [`exclusions`](#exclusions) — the server-wide "never sync this" list (applies to everyone).
-- [`headlessIncludes`](#headlessincludes) — the headless recipe.
-- [Client `Exclusions.jsonc`](#exclusionsjsonc) — the player's personal denylist.
+- [`syncPaths`](#syncpaths) - define what's synced and how (this is the dial).
+- [`exclusions`](#exclusions) - the server-wide "never sync this" list (applies to everyone).
+- [`headlessIncludes`](#headlessincludes) - the headless recipe.
+- [Client `Exclusions.jsonc`](#exclusionsjsonc) - the player's personal denylist.
 
 # Server
 
@@ -83,14 +83,14 @@ directory, which is named differently depending on which SPT line you run:
 
 > [!NOTE]
 > **SPT 4 path layout.** The SPT 4 server runs from a subfolder of the game root, not the game root
-> itself — `<gameRoot>/SPT/` on 4.0.x, renamed to `<gameRoot>/SPT_Runtime/` in 4.1.
+> itself - `<gameRoot>/SPT/` on 4.0.x, renamed to `<gameRoot>/SPT_Runtime/` in 4.1.
 > This means paths to client-side files (BepInEx, Managed, etc.) must use `../` to step up to the game root.
-> `user/mods/` and `ModSync.Updater.exe` are exceptions — they live under the server folder and need no prefix.
+> `user/mods/` and `ModSync.Updater.exe` are exceptions - they live under the server folder and need no prefix.
 > SPT 3 used plain `BepInEx/...` because the server ran at the game root.
 >
 > **The rename does not change your config.** Every path in `config.jsonc` is written relative to the
 > server folder, so `../BepInEx/plugins` means the same thing on both lines. A 4.0 config carries over
-> to 4.1 untouched — only the folder you find the file in differs.
+> to 4.1 untouched - only the folder you find the file in differs.
 
 ## `syncPaths`
 
@@ -171,7 +171,7 @@ behavior, or they can be omitted to inherit the default value.
     > Enforced paths can cause issues when files are generated client-side or excluded server-side. Ensure that all files a client
     > needs for mods in enforced paths are either present on the server or added to the [exclusions](#exclusions) list!
     >
-  - **Never enforce a folder that holds a file you exclude from players** (e.g. `../BepInEx/plugins/Fika`, which contains `Fika.Headless.dll`) — see the warning below.
+  - **Never enforce a folder that holds a file you exclude from players** (e.g. `../BepInEx/plugins/Fika`, which contains `Fika.Headless.dll`) - see the warning below.
 - `restartRequired` (boolean, optional) Default: `true` - Will clients have to restart their game after updating these files
   - Some files, like server mods, do not require a restart when syncing to the client
   - If a user is attempting to sync an update with any files marked `"restartRequired": true` will be required to restart
@@ -183,21 +183,21 @@ behavior, or they can be omitted to inherit the default value.
   - If a user is attempting to sync an update with any files marked `"silent": false` a prompt will be shown with all changes visible
   - This option plays well with `"restartRequired": false` and updates will be applied in the background while the game loads as usual
 - `headless` (boolean, optional) Default: `true` - Will this path be offered to Fika headless clients
-  - `"headless": false` withholds the path from headless entirely — it is never advertised, never hashed, never sent
+  - `"headless": false` withholds the path from headless entirely - it is never advertised, never hashed, never sent
   - Use it for anything a headless has no use for: graphics mods, map overlays, UI tweaks. A headless renders nothing, so these are pure disk and bandwidth cost, and some (like replacement graphics runtimes) can actively break it
   - This is independent of [`headlessIncludes`](#headlessincludes), which only allowlists plugins. `headless: false` wins over everything
   - A path marked `headless: false` still **claims** its files, so a catch-all can't quietly re-serve them to headless by the back door
 - `baseFiles` (array of strings, optional) Default: `[]` - Base-game files this mod replaces
-  - See [Mods that replace base-game files](#mods-that-replace-base-game-files) below — read it before using this
+  - See [Mods that replace base-game files](#mods-that-replace-base-game-files) below - read it before using this
 
 > [!WARNING]
 > **Never enforce the `../BepInEx/plugins/Fika` folder** (or any folder that contains a file you exclude from players).
 > `enforced` makes a client an exact mirror of the server and deletes anything the client has that the server's list
-> doesn't. On a **headless** client, enforcing a folder re-applies the server `exclusions` to it — which hides
-> `Fika.Headless.dll` from the list — so ModSync then deletes the headless's own `Fika.Headless.dll` on every sync,
+> doesn't. On a **headless** client, enforcing a folder re-applies the server `exclusions` to it - which hides
+> `Fika.Headless.dll` from the list - so ModSync then deletes the headless's own `Fika.Headless.dll` on every sync,
 > breaking the headless. Leave Fika on a **non-enforced** entry (e.g. the `../BepInEx/plugins` catch-all): there the
 > [`headlessIncludes`](#headlessincludes) allowlist delivers `Fika.Headless.dll` to headless while `exclusions` keeps it
-> from players, and it is never deleted. Enforce **individual mods** that every client must match — not a whole folder
+> from players, and it is never deleted. Enforce **individual mods** that every client must match - not a whole folder
 > holding a headless-only or player-excluded file.
 
 > [!TIP]
@@ -206,18 +206,18 @@ behavior, or they can be omitted to inherit the default value.
 >
 > **Recommended pattern:** keep the broad folders (`../BepInEx/plugins`, `../BepInEx/patchers`, `../BepInEx/config`)
 > as plain **non-enforced** catch-alls that set the default rules, then add specific entries only for the mods you
-> want to lock down. Every file belongs to exactly one syncPath — the most-specific match — so anything you don't
+> want to lock down. Every file belongs to exactly one syncPath - the most-specific match - so anything you don't
 > name explicitly falls back to the catch-all. Removing the catch-alls means every mod must be listed individually
-> and there is no safe default (this is the usual cause of a headless deleting `Fika.Headless.dll` — see the
+> and there is no safe default (this is the usual cause of a headless deleting `Fika.Headless.dll` - see the
 > warning under [`enforced`](#options) above).
 
 ### Examples
 
-Worked configurations — from the minimal setup to a real server's — **[Usage Examples](UsageExamples)**.
+Worked configurations - from the minimal setup to a real server's - **[Usage Examples](UsageExamples)**.
 
 ## Mods that replace base-game files
 
-Most mods only add files. A few **replace files that ship with the game** — DLSS swaps the NVIDIA runtime DLL, DynamicMaps swaps two Unity assemblies. These need `baseFiles`, because the mod's own folder is only half of it: without the replaced base file the mod does nothing, and a player who opts out is left with a modified game.
+Most mods only add files. A few **replace files that ship with the game** - DLSS swaps the NVIDIA runtime DLL, DynamicMaps swaps two Unity assemblies. These need `baseFiles`, because the mod's own folder is only half of it: without the replaced base file the mod does nothing, and a player who opts out is left with a modified game.
 
 List the base-game files the mod overwrites and ModSync handles both halves as one unit:
 
@@ -233,7 +233,7 @@ List the base-game files the mod overwrites and ModSync handles both halves as o
 }
 ```
 
-DynamicMaps replaces two Unity assemblies instead of one DLL — same shape, more entries:
+DynamicMaps replaces two Unity assemblies instead of one DLL - same shape, more entries:
 
 ```jsonc
 {
@@ -249,12 +249,12 @@ DynamicMaps replaces two Unity assemblies instead of one DLL — same shape, mor
 ```
 
 > [!WARNING]
-> **DynamicMaps is the riskier of the two.** The DLSS runtime DLL can be re-downloaded from NVIDIA if a player loses it. DynamicMaps' Unity assemblies **cannot** — they ship inside the game and aren't available separately, so a player who ends up with the modified copies and no backup has no way to get the originals except verifying or reinstalling their game files. This is exactly why ModSync refuses to remove a hand-installed copy (see below) rather than guessing.
+> **DynamicMaps is the riskier of the two.** The DLSS runtime DLL can be re-downloaded from NVIDIA if a player loses it. DynamicMaps' Unity assemblies **cannot** - they ship inside the game and aren't available separately, so a player who ends up with the modified copies and no backup has no way to get the originals except verifying or reinstalling their game files. This is exactly why ModSync refuses to remove a hand-installed copy (see below) rather than guessing.
 
 **What ModSync does with them:**
 
-1. **On install** — before overwriting a base file, it copies the player's original alongside it as `<file>.modsync-bak`.
-2. **On removal** — it restores that `.modsync-bak` over the replacement and deletes the backup, putting the game back exactly as it was.
+1. **On install** - before overwriting a base file, it copies the player's original alongside it as `<file>.modsync-bak`.
+2. **On removal** - it restores that `.modsync-bak` over the replacement and deletes the backup, putting the game back exactly as it was.
 
 Because the original is preserved, opting out of a `baseFiles` mod is safe and reversible.
 
@@ -285,21 +285,21 @@ Because the original is preserved, opting out of a `baseFiles` mod is safe and r
 
 ### When ModSync won't remove a mod
 
-If a player installed one of these mods **by hand before ModSync ever saw it**, there is no `.modsync-bak` — ModSync never took the original, so it has nothing to restore. Deleting the mod would leave the player running the mod's modified base files with the mod itself gone, which typically means an infinite load or a broken client.
+If a player installed one of these mods **by hand before ModSync ever saw it**, there is no `.modsync-bak` - ModSync never took the original, so it has nothing to restore. Deleting the mod would leave the player running the mod's modified base files with the mod itself gone, which typically means an infinite load or a broken client.
 
 Rather than risk that, ModSync **locks the entry**: it appears in the F12 menu as read-only with the note *"wasn't installed by ModSync and can't be removed safely."*
 
 To get out of that state, the player should:
 
 1. Verify or reinstall their game files so the originals are back in place (Steam/BSG launcher file verification, or a clean SPT install).
-2. Relaunch — ModSync now sees a clean baseline and the entry becomes a normal toggle it can install and remove.
+2. Relaunch - ModSync now sees a clean baseline and the entry becomes a normal toggle it can install and remove.
 
 > [!NOTE]
 > This lock only applies to mods with `baseFiles`. Ordinary mods, which only add files, are always freely removable.
 
 ### Known issue: Tarkov DLSS 4.5 and `Graphics.ini`
 
-Not a ModSync bug, but you will get support questions about it. The mod extends the game's DLSS presets, and a preset of **"Default"** gets written to `user/sptSettings/Graphics.ini` in a form the game cannot read back — the client then hangs on the loading screen with no error.
+Not a ModSync bug, but you will get support questions about it. The mod extends the game's DLSS presets, and a preset of **"Default"** gets written to `user/sptSettings/Graphics.ini` in a form the game cannot read back - the client then hangs on the loading screen with no error.
 
 - **Prevention:** tell players to pick an explicit DLSS preset (anything except *Default*) **before** the mod installs.
 - **Recovery:** open `user/sptSettings/Graphics.ini` and change the `DLSSPreset` line to a real preset:
@@ -308,8 +308,8 @@ Not a ModSync bug, but you will get support questions about it. The mod extends 
   "DLSSPreset": "K",         // ← any explicit preset
   ```
 
-  This keeps every other graphics setting intact. Only if that doesn't clear it, rename the whole file and let the game rebuild it — that works but discards resolution, quality and keybind-adjacent settings, so note them first.
-- **Also applies on removal** — the preset stays on a mod-added value after the mod is gone, so the same edit may be needed.
+  This keeps every other graphics setting intact. Only if that doesn't clear it, rename the whole file and let the game rebuild it - that works but discards resolution, quality and keybind-adjacent settings, so note them first.
+- **Also applies on removal** - the preset stays on a mod-added value after the mod is gone, so the same edit may be needed.
 
 ## `exclusions`
 
@@ -320,7 +320,7 @@ Exclusions can be specified as a list of paths or patterns not to include. You c
 {
     // ...
     "exclusions": [
-        // SPT / BepInEx baseline — not mods. Ship with SPT (or are generated
+        // SPT / BepInEx baseline - not mods. Ship with SPT (or are generated
         // per-machine by BepInEx); every client has its own, and an SPT update
         // replaces them. Never push the host's copies over a client's.
         "../BepInEx/plugins/spt",
@@ -328,10 +328,10 @@ Exclusions can be specified as a list of paths or patterns not to include. You c
         "../BepInEx/config/BepInEx.cfg",
         "../BepInEx/config/com.bepis.bepinex.configurationmanager.cfg",
 
-        // Fika headless DLL — must never reach regular players
+        // Fika headless DLL - must never reach regular players
         "../BepInEx/plugins/Fika/Fika.Headless.dll",
 
-        // Universal per-file opt-out — drop a .nosync or .nosync.txt file
+        // Universal per-file opt-out - drop a .nosync or .nosync.txt file
         // next to any mod folder/file to skip it
         "**/*.nosync",
         "**/*.nosync.txt",
@@ -343,7 +343,7 @@ Exclusions can be specified as a list of paths or patterns not to include. You c
 ```
 
 > [!TIP]
-> **The `.nosync` sentinel:** drop an empty `.nosync` or `.nosync.txt` file inside any mod folder to exclude that mod from sync without editing `config.jsonc`. Handy for mods that write per-machine state into their own folder — add it to the mod folder on the server and every client will skip that folder automatically.
+> **The `.nosync` sentinel:** drop an empty `.nosync` or `.nosync.txt` file inside any mod folder to exclude that mod from sync without editing `config.jsonc`. Handy for mods that write per-machine state into their own folder - add it to the mod folder on the server and every client will skip that folder automatically.
 
 > [!TIP]
 > If you ever run into a file that changes every time you try to sync, such as a log file or a configuration,
@@ -368,7 +368,7 @@ Exclusions can be specified as a list of paths or patterns not to include. You c
 
 ## `headlessIncludes`
 
-When a Fika headless client connects, ModSync serves it only the plugins explicitly listed in `headlessIncludes` (scoped to `../BepInEx/plugins` only). Patchers and config files pass through to headless unfiltered — only plugins are gated.
+When a Fika headless client connects, ModSync serves it only the plugins explicitly listed in `headlessIncludes` (scoped to `../BepInEx/plugins` only). Patchers and config files pass through to headless unfiltered - only plugins are gated.
 
 **An empty list means the headless client receives zero plugins.** You must populate this if you run a headless instance.
 
@@ -380,7 +380,7 @@ When a Fika headless client connects, ModSync serves it only the plugins explici
         "../BepInEx/plugins/Fika",
         "../BepInEx/plugins/Corter-ModSync",
 
-        // Bot AI — add whatever your headless needs:
+        // Bot AI - add whatever your headless needs:
         // "../BepInEx/plugins/SAIN",
         // "../BepInEx/plugins/DrakiaXYZ-BigBrain.dll",
         // "../BepInEx/plugins/DrakiaXYZ-Waypoints"
@@ -390,27 +390,27 @@ When a Fika headless client connects, ModSync serves it only the plugins explici
 
 Entries can target a **folder** or an **exact file**:
 
-- `../BepInEx/plugins/SAIN` — matches the folder and everything inside it. Directory boundary is respected: `SAIN` does NOT match `SAINFoo`.
-- `../BepInEx/plugins/DrakiaXYZ-BigBrain.dll` — matches just that one DLL. Sibling files in the same folder are not pulled in.
+- `../BepInEx/plugins/SAIN` - matches the folder and everything inside it. Directory boundary is respected: `SAIN` does NOT match `SAINFoo`.
+- `../BepInEx/plugins/DrakiaXYZ-BigBrain.dll` - matches just that one DLL. Sibling files in the same folder are not pulled in.
 
 > [!NOTE]
-> Entries in `headlessIncludes` override `exclusions` — if a file appears in both lists it **will** be sent to headless.
+> Entries in `headlessIncludes` override `exclusions` - if a file appears in both lists it **will** be sent to headless.
 > This is intentional: it lets you keep `Fika.Headless.dll` in `exclusions` (so regular players never receive it)
 > while still delivering it to headless clients via `headlessIncludes`.
 
 > [!NOTE]
 > **`enforced` paths bypass this allowlist.** An enforced mod reaches a headless client whether or not it is listed
-> here — the allowlist only gates **non-enforced** plugins. So enforcing a mod is a second, implicit way to put it on
+> here - the allowlist only gates **non-enforced** plugins. So enforcing a mod is a second, implicit way to put it on
 > your headless; if you don't want it there, use [`headless: false`](#options) instead, which overrides everything.
 
 > [!WARNING]
-> Do not use globs (e.g. `*.dll`) here. The allowlist exists to be deliberate about what reaches headless — a broad glob
+> Do not use globs (e.g. `*.dll`) here. The allowlist exists to be deliberate about what reaches headless - a broad glob
 > defeats the purpose and can accidentally re-include files you meant to exclude. An allowlist is also much shorter than
 > its denylist equivalent (~20 entries vs. hundreds of cosmetic mods), and you only have to update it when headless's
 > mod set changes, not when the player ecosystem moves.
 
 > [!TIP]
-> Watch the commas when you uncomment an example entry. The last active entry has **no** trailing comma, so add one to it before uncommenting the line below — otherwise you get two values with no separator and malformed JSON:
+> Watch the commas when you uncomment an example entry. The last active entry has **no** trailing comma, so add one to it before uncommenting the line below - otherwise you get two values with no separator and malformed JSON:
 >
 > ```jsonc
 > "headlessIncludes": [
@@ -422,17 +422,17 @@ Entries can target a **folder** or an **exact file**:
 > ```
 
 > [!NOTE]
-> **Known behaviour — headless receives every mod's config, not just the ones it runs.** `headlessIncludes` only gates
+> **Known behaviour - headless receives every mod's config, not just the ones it runs.** `headlessIncludes` only gates
 > the `../BepInEx/plugins` folder; `../BepInEx/config` passes through unfiltered, so a headless pulls the config file
 > for mods it doesn't even load.
 >
 > **Why it works this way:** config files are flat files named by the plugin's **GUID** (e.g. `me.sol.sain.cfg`), not by
 > its folder name (`SAIN`), so there's no reliable way to match a config back to a plugin the way a folder can be matched.
-> It's also the safe default — an unused config is a few harmless KB, and it means a headless *does* pick up any config
+> It's also the safe default - an unused config is a few harmless KB, and it means a headless *does* pick up any config
 > change you make on the server for the mods it actually runs.
 >
 > **If you really don't want a specific config on headless**, exclude it per-file: drop a `.nosync` next to it, or add its
-> path to [`exclusions`](#exclusions). Worth it for one noisy/large file — not for trimming configs wholesale.
+> path to [`exclusions`](#exclusions). Worth it for one noisy/large file - not for trimming configs wholesale.
 
 ## `managedIncludes`
 
@@ -442,7 +442,7 @@ Some mods ship Unity assemblies that must be installed into `EscapeFromTarkov_Da
 {
     // ...
     "managedIncludes": [
-        // Example — DynamicMaps ships these Unity assemblies. Replace with your own:
+        // Example - DynamicMaps ships these Unity assemblies. Replace with your own:
         // "Unity.VectorGraphics.dll",
         // "Unity.InternalAPIEngineBridge.003.dll"
     ]
@@ -451,13 +451,13 @@ Some mods ship Unity assemblies that must be installed into `EscapeFromTarkov_Da
 
 The server reads from `../EscapeFromTarkov_Data/Managed/` but only serves files you list here. This is intentionally restrictive:
 
-- **Docker/Linux server:** that folder is a staging area containing only the mod DLLs you placed there — nothing vanilla.
+- **Docker/Linux server:** that folder is a staging area containing only the mod DLLs you placed there - nothing vanilla.
 - **Windows host-is-also-a-player:** that folder contains the full EFT install (169+ Unity DLLs). Without the allowlist, vanilla Unity DLLs would be synced to all clients.
 
 **Backup behaviour:**
 
 - On install: if the file already exists on the client, the original is backed up as `<filename>.modsync-bak` before being replaced.
-- On removal (entry deleted from config, server restarted): if a `.modsync-bak` exists, the original is restored automatically. If no backup was made (the file was new — not present in vanilla), it is deleted.
+- On removal (entry deleted from config, server restarted): if a `.modsync-bak` exists, the original is restored automatically. If no backup was made (the file was new - not present in vanilla), it is deleted.
 
 ## `headlessManagedIncludes`
 
@@ -472,7 +472,7 @@ The headless equivalent of [`managedIncludes`](#managedincludes). Headless runs 
 
 ## Setting up a Fika headless install
 
-1. **On the server**, populate `headlessIncludes` in `config.jsonc` with the plugins your headless needs. Below is a full working example — adjust to your own mod set:
+1. **On the server**, populate `headlessIncludes` in `config.jsonc` with the plugins your headless needs. Below is a full working example - adjust to your own mod set:
 
    ```jsonc
    "headlessIncludes": [
@@ -518,7 +518,7 @@ The headless equivalent of [`managedIncludes`](#managedincludes). Headless runs 
        "../BepInEx/plugins/WTT-PackNStrap"
    ]
    ```
-2. **On the headless install** — nothing to configure. It detects `Fika.Headless.dll` at startup, sends `?headless=1` to the server, and gets only the allowlisted plugins back. `Exclusions.jsonc` stays at its empty default.
+2. **On the headless install** - nothing to configure. It detects `Fika.Headless.dll` at startup, sends `?headless=1` to the server, and gets only the allowlisted plugins back. `Exclusions.jsonc` stays at its empty default.
 
 When in doubt about whether a particular mod is safe on headless, check the [Fika wiki](https://github.com/project-fika/Wiki) or ask in the Fika Discord.
 
@@ -554,26 +554,26 @@ For each path or glob you list:
 | How the file got onto this install                    | What happens on next sync                                  |
 | ----------------------------------------------------- | ---------------------------------------------------------- |
 | ModSync installed it on a previous sync               | **Deleted** locally                                  |
-| You never had it                                      | Stays absent — not downloaded                             |
-| You copied it in by hand (ModSync never installed it) | **Stays** — ModSync only touches files it installed |
+| You never had it                                      | Stays absent - not downloaded                             |
+| You copied it in by hand (ModSync never installed it) | **Stays** - ModSync only touches files it installed |
 
 This is an **uninstall + don't-reinstall** list, not a "freeze locally" list. Add something you currently have, and ModSync will remove it on the next sync (assuming ModSync had installed it in the first place).
 
 ### Player vs headless usage
 
-- **Player install:** use this for personal opt-outs — visual mods you don't want, hotkey mods that conflict with yours, etc. Typically just a handful of entries per player.
+- **Player install:** use this for personal opt-outs - visual mods you don't want, hotkey mods that conflict with yours, etc. Typically just a handful of entries per player.
 - **Headless install:** **usually empty.** The server's `headlessIncludes` allowlist already controls what reaches headless. Use this file only for per-headless overrides on top of the allowlist (rare).
 
 ### Trimming ModSync's own components (optional)
 
-ModSync ships three of its own files: the plugin, the desktop **Updater** (`ModSync.Updater.exe`), and the headless **patcher** (`BepInEx/patchers/Corter-ModSync-Prepatch.dll`). By default all three sync to every client — which is harmless, but the Updater is dead weight on headless and the patcher is dead weight on players. If you want leaner installs, you can trim the one each side never runs:
+ModSync ships three of its own files: the plugin, the desktop **Updater** (`ModSync.Updater.exe`), and the headless **patcher** (`BepInEx/patchers/Corter-ModSync-Prepatch.dll`). By default all three sync to every client - which is harmless, but the Updater is dead weight on headless and the patcher is dead weight on players. If you want leaner installs, you can trim the one each side never runs:
 
 | To remove…                                           | Add this to that install's`Exclusions.jsonc`   |
 | ----------------------------------------------------- | ------------------------------------------------ |
 | The **Updater** from a **headless** client | `ModSync.Updater.exe`                          |
 | The **patcher** from a **player** client   | `BepInEx/patchers/Corter-ModSync-Prepatch.dll` |
 
-ModSync only honours these on the side that doesn't need the file. Each component stays **enforced** on the side that *does*: a player can't exclude the Updater, and a headless can't exclude the patcher — the exclusion is silently ignored so you can't break your own apply mechanism. The plugin itself is always enforced everywhere. Leaving all three in place is completely fine; this is purely for a minimal install.
+ModSync only honours these on the side that doesn't need the file. Each component stays **enforced** on the side that *does*: a player can't exclude the Updater, and a headless can't exclude the patcher - the exclusion is silently ignored so you can't break your own apply mechanism. The plugin itself is always enforced everywhere. Leaving all three in place is completely fine; this is purely for a minimal install.
 
 ### Edits aren't live
 
@@ -583,7 +583,7 @@ ModSync only honours these on the side that doesn't need the file. Each componen
 
 ```jsonc
 [
-    // Examples — uncomment / edit as needed:
+    // Examples - uncomment / edit as needed:
     "BepInEx/plugins/NoInsurance.dll",
     "BepInEx/plugins/HollywoodGraphics/**",
     "BepInEx/config/com.author.somemod.cfg"
@@ -592,9 +592,9 @@ ModSync only honours these on the side that doesn't need the file. Each componen
 
 Entries can be:
 
-- **An exact file path** — `BepInEx/plugins/SomeMod.dll`
-- **A folder path** — `BepInEx/plugins/DynamicMaps` matches the folder and everything inside it
-- **A glob** — `BepInEx/plugins/DynamicMaps/**`, `BepInEx/config/*.cfg`
+- **An exact file path** - `BepInEx/plugins/SomeMod.dll`
+- **A folder path** - `BepInEx/plugins/DynamicMaps` matches the folder and everything inside it
+- **A glob** - `BepInEx/plugins/DynamicMaps/**`, `BepInEx/config/*.cfg`
 
 Paths are written game-root-relative with forward slashes.
 
@@ -617,9 +617,9 @@ Paths are written game-root-relative with forward slashes.
 3. **BepInEx mod the headless needs to run raids properly** (bot AI, pathfinding, networking, server-driven gameplay)?
    → Add to `headlessIncludes` on the server.
 4. **BepInEx mod that's purely client-facing** (HUD, UI overlays, visual effects, item info, hotkeys)?
-   → Don't list anywhere — players get it by default, headless skips it because it's not in `headlessIncludes`.
+   → Don't list anywhere - players get it by default, headless skips it because it's not in `headlessIncludes`.
 5. **Mod that ships Unity assemblies into `EscapeFromTarkov_Data/Managed/`?**
-   → Add the DLL filenames to `managedIncludes`. Place the DLL files in `../EscapeFromTarkov_Data/Managed/` on the server (a staging folder on Docker, or the existing EFT folder on Windows — the allowlist keeps vanilla files out either way).
+   → Add the DLL filenames to `managedIncludes`. Place the DLL files in `../EscapeFromTarkov_Data/Managed/` on the server (a staging folder on Docker, or the existing EFT folder on Windows - the allowlist keeps vanilla files out either way).
 6. **A particular player doesn't want a particular mod?**
    → That player adds it to their own `Exclusions.jsonc`.
 7. **`Fika.Headless.dll`** → already in `exclusions` by default. Don't add anywhere else.

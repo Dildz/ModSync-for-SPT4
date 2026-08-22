@@ -2,11 +2,11 @@ using SPTarkov.Common.Models.Logging;
 using SPTarkov.DI.Annotations;
 using SPTarkov.Server.Core.DI;
 using SPTarkov.Server.Core.Models.Spt.Mod;
-// IModBlazorMetadata lives in the Web package, not Server.Core — implementing it is what
+// IModBlazorMetadata lives in the Web package, not Server.Core - implementing it is what
 // makes SPT serve this mod's Blazor pages.
 using SPTarkov.Server.Web;
 
-// Aliases — SemanticVersioning ships its own Version/Range types that shadow System.Version.
+// Aliases - SemanticVersioning ships its own Version/Range types that shadow System.Version.
 // Aliasing here makes the ModMetadata properties below read cleanly.
 using Range = SemanticVersioning.Range;
 using Version = SemanticVersioning.Version;
@@ -14,11 +14,11 @@ using Version = SemanticVersioning.Version;
 namespace ModSync.Server;
 
 /// <summary>
-/// Mod metadata — SPT 4 replaces the old package.json with a strongly-typed contract.
+/// Mod metadata - SPT 4 replaces the old package.json with a strongly-typed contract.
 ///
 /// SPT 4.1 changed this from an abstract record (`AbstractModMetadata`) to an interface
 /// (`IModMetadata`). Practically that means two things: the properties no longer use
-/// `override` (there's no base implementation to override — an interface only declares
+/// `override` (there's no base implementation to override - an interface only declares
 /// the shape), and `IsBundleMod` is gone. SPT now decides that for itself by looking for
 /// a bundles.json in the mod folder.
 ///
@@ -37,7 +37,7 @@ public record ModMetadata : IModMetadata, IModBlazorMetadata
     public List<string>? Contributors { get; init; } = ["Dildz (SPT 4.x port)"];
     public Version Version { get; init; } = new("0.13.0");
 
-    // Semver range — "~4.1.0" means ">=4.1.0 <4.2.0" (compatible with SPT 4.1.x).
+    // Semver range - "~4.1.0" means ">=4.1.0 <4.2.0" (compatible with SPT 4.1.x).
     public Range SptVersion { get; init; } = new("~4.1.0");
 
     // New in 4.1. Set true only if the mod ships enum prepatch definitions in
@@ -73,12 +73,12 @@ public record ModMetadata : IModMetadata, IModBlazorMetadata
 /// SPT 4.1 deleted the dedicated `IPreSptLoadModAsync` interface, so we use the general
 /// `IOnLoad` hook instead. The pre-SPT-load timing is now expressed purely through load
 /// order: SPT runs every `IOnLoad` whose TypePriority sits below `OnLoadOrder.GameCallbacks`
-/// in an early pass, before the rest of startup. `Preload + 1` puts us in that pass — the
+/// in an early pass, before the rest of startup. `Preload + 1` puts us in that pass - the
 /// same slot the old `PreSptModLoader + 1` occupied (both are the value 100000), so the
 /// timing is unchanged. That matters here because we register an HTTP listener and want to
 /// be ready before clients can connect.
 ///
-/// Primary constructor syntax — `ModSyncMod(...)` declares the constructor parameters
+/// Primary constructor syntax - `ModSyncMod(...)` declares the constructor parameters
 /// inline with the class definition. The parameters are implicitly stored as private
 /// fields you can reference from any method.
 ///
@@ -116,7 +116,7 @@ public class ModSyncMod(
             // Mirrors corter's "load failed → log + leave listener dormant" behaviour.
             // The listener stays uninitialized so CanHandle returns false and the
             // /modsync/ routes 404 cleanly rather than serving partial data.
-            logger.Error($"Corter-ModSync: failed to load config — server mod is disabled.\n{ex}");
+            logger.Error($"Corter-ModSync: failed to load config - server mod is disabled.\n{ex}");
             return;
         }
 
@@ -147,7 +147,7 @@ public class ModSyncMod(
         // Hand config + version to the listener. After this returns, it starts
         // accepting requests on /modsync/*. We pull the version from ModMetadata
         // so the wire response always matches the declared mod version (single
-        // source of truth — change it in one place).
+        // source of truth - change it in one place).
         var modVersion = new ModMetadata().Version.ToString();
         listener.Initialize(config, modVersion);
 
