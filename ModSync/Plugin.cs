@@ -22,7 +22,7 @@ namespace ModSync;
 using SyncPathFileList = Dictionary<string, List<string>>;
 using SyncPathModFiles = Dictionary<string, Dictionary<string, ModFile>>;
 
-[BepInPlugin("corter.modsync", "Corter ModSync", "0.13.0")]
+[BepInPlugin("corter.modsync", "Corter ModSync", "0.13.1")]
 public class Plugin : BaseUnityPlugin
 {
     private static readonly string MODSYNC_DIR = Path.Combine(Directory.GetCurrentDirectory(), "ModSync_Data");
@@ -139,6 +139,13 @@ public class Plugin : BaseUnityPlugin
     public static string PluginVersion => MetadataHelper.GetMetadata(typeof(Plugin)).Version.ToString();
 
     /// <summary>
+    /// Mirrors a line into ModSync_Data/ModSync.log. Used for one-shot events a player may only
+    /// question days later, by which point BepInEx has overwritten LogOutput.log several times.
+    /// </summary>
+    private static void AppendToModSyncLog(string message) =>
+        ModSyncLog.Append(Directory.GetCurrentDirectory(), "Plugin", message);
+
+    /// <summary>
     /// True if this syncpath's files already exist on the client. Used to seed an opt-in
     /// toggle's DEFAULT to the installed state, so a mod the player already has isn't
     /// defaulted off and immediately flagged for removal. Only affects the first bind.
@@ -151,12 +158,16 @@ public class Plugin : BaseUnityPlugin
         return Directory.Exists(full) && Directory.EnumerateFileSystemEntries(full).Any();
     }
     /// <summary>
-    /// An "optional" path is one the player genuinely chooses: opt-in (<c>enabled:false</c>)
-    /// and not enforced by the server. Only these get a working F12 checkbox - everything
-    /// else is shown for transparency but drawn as text (see <see cref="InfoOnlyDrawer"/>).
+    /// An "optional" path is one the player genuinely chooses, and only these get a working
+    /// F12 checkbox - everything else is shown for transparency but drawn as text (see
+    /// <see cref="InfoOnlyDrawer"/>). Two ways to be one:
+    ///   • <c>enabled:false</c> - opt-in, the toggle starts unticked
+    ///   • <c>optional:true</c> - the admin marked it player-choosable; <c>enabled</c> then
+    ///     only decides whether the toggle starts ticked
+    /// Either way the server has the final say: <c>enforced</c> paths are never a choice.
     /// </summary>
     private static bool IsOptional(SyncPath syncPath) =>
-        !syncPath.enabled
+        (syncPath.optional || !syncPath.enabled)
         && !syncPath.enforced;
 
     /// <summary>
@@ -552,6 +563,14 @@ public class Plugin : BaseUnityPlugin
 
         Logger.LogDebug("Loading syncPath configs");
 
+        // Bring forward any choice saved under a syncpath's NAME before binding anything, so a
+        // server-side rename doesn't silently reset the player's toggles. See Migrator.
+        var carriedToggles = Migrator.CarryToggleValues(Config, syncPaths, message =>
+        {
+            Logger.LogInfo(message);
+            AppendToModSyncLog(message);
+        });
+
         try
         {
             configSyncPathToggles = syncPaths
@@ -559,17 +578,27 @@ public class Plugin : BaseUnityPlugin
                     syncPath.path,
                     Config.Bind(
                         "Synced Paths",
-                        syncPath.name.Replace("\\", "/"),
+                        // Keyed by PATH, which identifies what is actually synced and survives the
+                        // admin relabelling an entry. The friendly name is what the player SEES,
+                        // via DispName below.
+                        syncPath.path.Replace("\\", "/"),
                         // Seed the toggle DEFAULT from the installed state: an opt-in mod the
                         // player already has defaults to CHECKED (kept, not flagged for removal);
                         // one they don't have defaults to unchecked. `enabled:true` paths stay on.
-                        // Only the FIRST bind uses this default - the saved value wins afterwards.
-                        syncPath.enabled || (!IsHeadless && IsInstalledLocally(syncPath.path)),
+                        // Only the FIRST bind uses this default - the saved value wins afterwards,
+                        // including one carried over from this path's old name-keyed entry.
+                        carriedToggles.TryGetValue(syncPath.path, out var carried)
+                            ? carried
+                            : syncPath.enabled || (!IsHeadless && IsInstalledLocally(syncPath.path)),
                         new ConfigDescription(
                             $"Should the mod attempt to sync files from {syncPath.path.Replace("\\", "/")}",
                             null,
                             new ConfigurationManagerAttributes
                             {
+                                // The row is keyed by path but LABELLED with the admin's name, so
+                                // relabelling a mod changes what players read without touching
+                                // what they chose.
+                                DispName = syncPath.name,
                                 // Opt-in mods, enforced paths and ModSync's own components are
                                 // shown (see IsVisibleInMenu); the catch-alls are not. Of those
                                 // shown, only opt-in paths are an actual choice, so they keep a

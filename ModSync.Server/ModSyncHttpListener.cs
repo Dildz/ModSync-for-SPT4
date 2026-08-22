@@ -212,6 +212,7 @@ public class ModSyncHttpListener(
             path: PathExt.ToWirePath(PathExt.WinPath(sp.path)),
             name: sp.name,
             enabled: sp.enabled,
+            optional: sp.optional,
             // The Updater (desktop players) and patcher (headless) are each enforced for the
             // audience that runs them and relaxed for the other.
             enforced: ConfigUtil.ResolveEnforced(sp, isHeadless),
@@ -347,6 +348,7 @@ public record SyncPathDto(
     string path,
     string name,
     bool enabled,
+    bool optional,
     bool enforced,
     bool silent,
     bool restartRequired,

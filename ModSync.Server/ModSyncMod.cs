@@ -35,7 +35,7 @@ public record ModMetadata : IModMetadata, IModBlazorMetadata
     public string Name { get; init; } = "Corter-ModSync";
     public string Author { get; init; } = "Corter";
     public List<string>? Contributors { get; init; } = ["Dildz (SPT 4.x port)"];
-    public Version Version { get; init; } = new("0.13.0");
+    public Version Version { get; init; } = new("0.13.1");
 
     // Semver range - "~4.1.0" means ">=4.1.0 <4.2.0" (compatible with SPT 4.1.x).
     public Range SptVersion { get; init; } = new("~4.1.0");

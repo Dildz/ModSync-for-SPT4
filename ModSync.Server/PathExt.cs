@@ -9,9 +9,10 @@ namespace ModSync.Server;
 /// to the client we must convert them. Going the other direction (parsing incoming requests),
 /// we normalize to forward slashes for matching against config syncpaths/exclusions.
 ///
-/// **Wire/server translation** (new in SPT 4): the server runs from `&lt;game&gt;/SPT/` but the
-/// BepInEx client runs from `&lt;game&gt;/`. So every path crossing the wire needs to be expressed
-/// relative to whichever side will resolve it - they're not the same.
+/// **Wire/server translation** (new in SPT 4): the server runs from a subfolder of the game root
+/// (`SPT/` on 4.0, renamed to `SPT_Runtime/` on 4.1) but the BepInEx client runs from `&lt;game&gt;/`.
+/// So every path crossing the wire needs to be expressed relative to whichever side will resolve
+/// it - they're not the same.
 ///
 /// We use **game-root-relative paths as the wire format**, because that's what the client
 /// can directly hand to `Path.GetFullPath` / `Path.Combine`. The server stores paths in its
@@ -20,8 +21,8 @@ namespace ModSync.Server;
 ///
 /// Translation rules:
 /// <list type="bullet">
-///   <item>Server `../BepInEx/plugins` (up out of SPT/) ↔ Wire `BepInEx/plugins`</item>
-///   <item>Server `user/mods` (inside SPT/) ↔ Wire `SPT/user/mods`</item>
+///   <item>Server `../BepInEx/plugins` (up out of the server folder) ↔ Wire `BepInEx/plugins`</item>
+///   <item>Server `user/mods` (inside it) ↔ Wire `SPT_Runtime/user/mods`</item>
 ///   <item>Server `../ModSync.Updater.exe` ↔ Wire `ModSync.Updater.exe`</item>
 /// </list>
 ///
@@ -29,6 +30,20 @@ namespace ModSync.Server;
 /// </summary>
 public static class PathExt
 {
+    /// <summary>
+    /// The server folder's name as the client sees it from the game root: `SPT` on SPT 4.0,
+    /// `SPT_Runtime` on 4.1.
+    ///
+    /// Derived from the working directory rather than hardcoded. Every other server-side path
+    /// (`../BepInEx/...`, `user/mods`) is resolved against that same cwd, so the two can never
+    /// legitimately disagree - if they did, the `../` paths would already be resolving into the
+    /// wrong place. Hardcoding it is what made 4.1 advertise `user/mods` as `SPT\user\mods` and
+    /// land it in `&lt;gameRoot&gt;/SPT/`, a folder that doesn't exist on 4.1.
+    ///
+    /// Read once: the server never changes directory after startup.
+    /// </summary>
+    private static readonly string ServerFolder = new DirectoryInfo(Directory.GetCurrentDirectory()).Name;
+
     /// <summary>Convert all '/' to '\\' - for paths going out to the Windows BepInEx client.</summary>
     public static string WinPath(string p) => p.Replace('/', '\\');
 
@@ -38,8 +53,8 @@ public static class PathExt
     /// <summary>
     /// Server-cwd-relative path → game-root-relative ("wire") path.
     ///
-    /// Strips a leading `../` (path goes up out of SPT/ to game root); otherwise prepends
-    /// `SPT/` (path is inside the SPT subdir, client needs the prefix to reach it).
+    /// Strips a leading `../` (path goes up out of the server folder to game root); otherwise
+    /// prepends the server folder's name (path is inside it, client needs the prefix to reach it).
     ///
     /// Separator-aware: handles both `/` and `\`. The output uses whatever the input used
     /// for the separator after the modified prefix - we only mutate the leading 3 chars
@@ -49,18 +64,18 @@ public static class PathExt
     {
         if (serverPath.StartsWith("../", StringComparison.Ordinal)) return serverPath[3..];
         if (serverPath.StartsWith(@"..\", StringComparison.Ordinal)) return serverPath[3..];
-        // No leading "../" → path lives inside the SPT subdir on the server's filesystem.
-        // From the client's POV that's `SPT/<whatever>`. Prefer backslash since the rest of
-        // the wire format is backslash-normalized via WinPath().
-        return @"SPT\" + serverPath;
+        // No leading "../" → path lives inside the server folder on the server's filesystem.
+        // From the client's POV that's `<serverFolder>/<whatever>`. Prefer backslash since the
+        // rest of the wire format is backslash-normalized via WinPath().
+        return ServerFolder + @"\" + serverPath;
     }
 
     /// <summary>
     /// Game-root-relative ("wire") path → server-cwd-relative path. Inverse of <see cref="ToWirePath"/>.
     ///
-    /// If the wire path starts with `SPT/` or `SPT\`, strip that prefix (it's inside the
-    /// SPT subdir and the server's cwd IS that subdir). Otherwise prepend `../` (server
-    /// needs to go up to reach a game-root-level path).
+    /// If the wire path starts with the server folder's name (either separator), strip that
+    /// prefix - it's inside the server folder and the server's cwd IS that folder. Otherwise
+    /// prepend `../` (server needs to go up to reach a game-root-level path).
     ///
     /// **Forward slash deliberately**, not backslash: this result feeds into `Path.Combine`
     /// + `Path.GetFullPath` on the server. Windows treats both `/` and `\` as separators
@@ -70,13 +85,13 @@ public static class PathExt
     /// `..\` doesn't get collapsed and the request fails sanitization with a confusing
     /// "not in any enabled sync path" error. Forward slash works on both platforms.
     ///
-    /// Only the literal `SPT/` (with trailing separator) is stripped - a syncpath named
-    /// `SPTfoo` won't false-match.
+    /// Only the folder name followed by a separator is stripped, so on 4.0 a syncpath named
+    /// `SPTfoo` won't false-match `SPT`.
     /// </summary>
     public static string ToServerPath(string wirePath)
     {
-        if (wirePath.StartsWith("SPT/", StringComparison.Ordinal)) return wirePath[4..];
-        if (wirePath.StartsWith(@"SPT\", StringComparison.Ordinal)) return wirePath[4..];
+        if (wirePath.StartsWith(ServerFolder + "/", StringComparison.Ordinal)) return wirePath[(ServerFolder.Length + 1)..];
+        if (wirePath.StartsWith(ServerFolder + @"\", StringComparison.Ordinal)) return wirePath[(ServerFolder.Length + 1)..];
         return "../" + wirePath;
     }
 }

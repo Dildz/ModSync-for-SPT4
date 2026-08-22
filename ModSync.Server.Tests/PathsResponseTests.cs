@@ -193,6 +193,25 @@ public class PathsResponseTests
     }
 
     [Test]
+    public void Optional_ReachesTheClient()
+    {
+        // `optional` only ever does anything in the client's F12 menu, so it has to survive the
+        // wire. If it silently didn't, an admin's opt-out mod would just look like every other
+        // enabled path: synced, and invisible in the menu.
+        var optOut = new SyncPath("user/mods", name: "Server mods", optional: true);
+        var ordinary = new SyncPath("../BepInEx/plugins");
+
+        var dtos = ModSyncHttpListener.BuildPathsResponse([optOut, ordinary], isHeadless: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dtos[0].optional, Is.True);
+            Assert.That(dtos[0].enabled, Is.True, "optional is independent of enabled");
+            Assert.That(dtos[1].optional, Is.False, "a plain path must stay out of the menu");
+        });
+    }
+
+    [Test]
     public void PerAudienceEnforcement_IsAppliedToBuiltins()
     {
         // The Updater is enforced for players and relaxed for headless; the patcher is the
