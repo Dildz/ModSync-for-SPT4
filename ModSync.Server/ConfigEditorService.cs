@@ -63,6 +63,15 @@ public class ConfigDraft
 public record ConfigWarning(string Path, string Message, bool Blocking);
 
 /// <summary>
+/// One mod as an admin thinks of it, and the syncPath rows it actually owns.
+///
+/// A mod is frequently two entries - its plugin folder and its BepInEx <c>.cfg</c> - which an admin
+/// has to keep in step by hand today. Grouping them means one decision about who gets the mod
+/// instead of two that can drift apart.
+/// </summary>
+public record CuratedMod(string Label, List<SyncPathRow> Rows);
+
+/// <summary>
 /// Reads config.jsonc into an editable draft, and checks a draft for the mistakes that are easy to
 /// make and expensive to discover on a live server.
 ///
@@ -77,13 +86,18 @@ public record ConfigWarning(string Path, string Message, bool Blocking);
 [Injectable(InjectionType.Scoped)]
 public class ConfigEditorService
 {
-    // The three catch-alls. Marking one of these `optional` gives players a checkbox that uninstalls
-    // the mods they need in order to connect at all, which is a support ticket rather than a choice.
-    private static readonly string[] CatchAlls =
+    /// <summary>
+    /// The three catch-alls: the folders the shipped config shares wholesale, which between them
+    /// cover every client mod. The editor's first section is exactly these three.
+    ///
+    /// Marking one `optional` gives players a checkbox that uninstalls the mods they need in order
+    /// to connect at all, which is a support ticket rather than a choice - see <see cref="Validate"/>.
+    /// </summary>
+    public static readonly string[] CatchAlls =
     [
-        "../BepInEx/plugins",
-        "../BepInEx/patchers",
-        "../BepInEx/config",
+        ClientModScanner.PluginsPath,
+        ClientModScanner.PatchersPath,
+        ClientModScanner.ConfigPath,
     ];
 
     private static readonly JsonSerializerOptions JsoncOptions = new()
@@ -188,7 +202,7 @@ public class ConfigEditorService
                 continue;
             }
 
-            if (row.Optional && CatchAlls.Contains(row.Path.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase))
+            if (row.Optional && IsCatchAll(row.Path))
                 warnings.Add(new ConfigWarning(row.Path,
                     "This is a catch-all path. Marking it optional gives every player a checkbox that "
                     + "uninstalls their whole modset, including the mods they need in order to connect.", true));
@@ -210,5 +224,58 @@ public class ConfigEditorService
                 $"'{group.Key}' is listed {group.Count()} times. Only one of them will take effect.", false));
 
         return warnings;
+    }
+
+    /// <summary>True for one of the three folders that between them cover the whole client modset.</summary>
+    public static bool IsCatchAll(string path) =>
+        CatchAlls.Contains(path.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The mod a row belongs to.
+    ///
+    /// Admins label a mod's config entry "&lt;name&gt; - config" and prefix opt-in entries with
+    /// "(Optional) ". Both are hand-maintained compensation for a config format that never said who
+    /// gets what, so the editor strips them to recover the name underneath - and, because being
+    /// listed as a player's choice is now what makes something optional, it never writes them back.
+    /// </summary>
+    public static string ModIdentity(SyncPathRow row)
+    {
+        var name = string.IsNullOrWhiteSpace(row.Name) ? row.Path : row.Name;
+
+        const string optionalPrefix = "(Optional)";
+        if (name.StartsWith(optionalPrefix, StringComparison.OrdinalIgnoreCase))
+            name = name[optionalPrefix.Length..].TrimStart();
+
+        // Only a trailing "- config" is a suffix. A hyphen elsewhere is part of the name
+        // (DrakiaXYZ-Waypoints, Corter-ModSync), so anchor on the last one and check what follows.
+        var dash = name.LastIndexOf('-');
+        if (dash > 0 && name[(dash + 1)..].Trim().Equals("config", StringComparison.OrdinalIgnoreCase))
+            name = name[..dash];
+
+        return name.Trim();
+    }
+
+    /// <summary>
+    /// Every syncPath that is not a catch-all, grouped into the mods they belong to. These are the
+    /// carve-outs: entries that out-rank the folder enclosing them because <c>ConfigUtil</c> sorts
+    /// by descending path length, which is what lets one mod inside a shared folder be a choice.
+    /// Order follows the file, so the editor never reshuffles an admin's list.
+    /// </summary>
+    public static List<CuratedMod> Curated(ConfigDraft draft)
+    {
+        var groups = new List<CuratedMod>();
+
+        foreach (var row in draft.SyncPaths)
+        {
+            if (IsCatchAll(row.Path)) continue;
+
+            var label = ModIdentity(row);
+            var existing = groups.Find(g => g.Label.Equals(label, StringComparison.OrdinalIgnoreCase));
+
+            if (existing is null) groups.Add(new CuratedMod(label, [row]));
+            else existing.Rows.Add(row);
+        }
+
+        return groups;
     }
 }

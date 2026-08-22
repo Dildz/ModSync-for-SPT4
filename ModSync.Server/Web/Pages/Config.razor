@@ -12,23 +12,30 @@
     together with authentication - an editor that can write this file is effectively a remote
     shell over the port players sync against, so the two have to ship at the same time.
 
-    Everything here edits an in-memory draft read fresh from config.jsonc on each visit.
+    THE SHAPE OF THIS PAGE IS DELIBERATE, and it is not "a form over config.jsonc".
+
+    There are two ways to run ModSync and they are not alternatives:
+      lazy    - players get everything in the three BepInEx folders, minus the exclusions
+      curated - some of those mods are made a player's choice instead
+
+    Curated is lazy WITH CARVE-OUTS. The catch-alls stay on; a curated mod is an exception punched
+    out of one, which works only because ConfigUtil sorts syncPaths by descending path length so the
+    longer entry out-ranks the folder it sits inside. That is why section 2 never switches anything
+    off, and why removing a mod from it reads as "back to everyone".
+
+    Headless is a third, separate question - it has no F12 menu, so it cannot choose, and it gets its
+    own allowlist. Hence three sections, always present, with no mode switch anywhere.
 *@
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
     <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/modsync" Size="Size.Small" />
-    <MudText Typo="Typo.h5">Configuration</MudText>
+    <MudText Typo="Typo.h5">ModSync</MudText>
 </MudStack>
 
 <MudText Typo="Typo.body2" Class="mb-4" Style="opacity:.7;">
-    Reading <code>@ConfigEditorService.ConfigPath</code>.
-    Every option is explained in the <MudLink Href="/modsync/Configuration">configuration reference</MudLink>.
+    What your players download when they connect. This page is already set up - you can leave it
+    exactly as it is. Reading <code>@ConfigEditorService.ConfigPath</code>.
 </MudText>
-
-<MudAlert Severity="Severity.Warning" Class="mb-6">
-    <b>Changes here are not saved yet.</b> This is the editing surface only - saving, and the login
-    that has to guard it, arrive together in the next step. Edit <code>config.jsonc</code> by hand for now.
-</MudAlert>
 
 @if (_draft is null)
 {
@@ -38,160 +45,342 @@
     }
     else
     {
-        <MudAlert Severity="Severity.Error">
-            Could not read the config: @_error
-        </MudAlert>
+        <MudAlert Severity="Severity.Error">Could not read the config: @_error</MudAlert>
     }
 }
 else
 {
-    @if (_warnings.Count > 0)
-    {
-        <MudPaper Class="pa-4 mb-6" Elevation="0" Style="border:1px solid var(--mud-palette-warning);">
-            <MudText Typo="Typo.subtitle2" Class="mb-2">@_warnings.Count issue@(_warnings.Count == 1 ? "" : "s") found</MudText>
-            @foreach (var warning in _warnings)
-            {
-                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start" Class="mb-1">
-                    <MudIcon Size="Size.Small"
-                             Color="@(warning.Blocking ? Color.Error : Color.Warning)"
-                             Icon="@(warning.Blocking ? Icons.Material.Filled.Error : Icons.Material.Filled.Warning)" />
-                    <MudText Typo="Typo.body2">
-                        @if (!string.IsNullOrEmpty(warning.Path))
-                        {
-                            <code>@warning.Path</code>
-                            <text> &mdash; </text>
-                        }
-                        @warning.Message
-                    </MudText>
-                </MudStack>
-            }
-        </MudPaper>
-    }
+    @* The whole of the "what goes where" guidance, collapsed. An admin who knows the answer never
+       opens it; one who does not gets it without leaving the page for the wiki. *@
+    <MudExpansionPanels Class="mb-6" Elevation="0">
+        <MudExpansionPanel Text="Not sure where something goes?">
+            <MudText Typo="Typo.subtitle2">Should every player get it?</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2" Style="opacity:.75;">
+                Do nothing. Everything in the three folders below already goes to everyone.
+            </MudText>
 
-    <MudText Typo="Typo.h6" Class="mb-1">Sync paths</MudText>
-    <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.7;">
-        What the server sends to clients. @_draft.SyncPaths.Count entr@(_draft.SyncPaths.Count == 1 ? "y" : "ies").
-        ModSync's own components are added automatically and are not listed here.
-    </MudText>
+            <MudText Typo="Typo.subtitle2">Should players decide for themselves?</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2" Style="opacity:.75;">
+                Add it under <b>Let players choose</b>. It becomes a checkbox in their F12 menu.
+            </MudText>
 
-    <MudExpansionPanels MultiExpansion="true" Class="mb-6">
-        @foreach (var row in _draft.SyncPaths)
-        {
-            <MudExpansionPanel>
-                <TitleContent>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudText Typo="Typo.body1"><code>@row.Path</code></MudText>
+            <MudText Typo="Typo.subtitle2">Should nobody ever get it?</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2" Style="opacity:.75;">
+                Add it to <b>Never send these</b>. Server-only files, and anything with your details in it.
+            </MudText>
 
-                        @* Only non-default options get a chip. A row showing no chips is behaving
-                           exactly as a bare string would, which is the common case and should look
-                           uncluttered rather than covered in badges saying "default". *@
-                        @foreach (var (label, colour) in ChipsFor(row))
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="@colour" Variant="Variant.Text">@label</MudChip>
-                        }
-                    </MudStack>
-                </TitleContent>
-
-                <ChildContent>
-                    <MudGrid>
-                        <MudItem xs="12" md="6">
-                            <MudTextField @bind-Value="row.Path" Label="Path" Variant="Variant.Outlined"
-                                          HelperText="Relative to the server folder. Client-side paths start with ../" />
-                        </MudItem>
-                        <MudItem xs="12" md="6">
-                            <MudTextField @bind-Value="row.Name" Label="Name" Variant="Variant.Outlined"
-                                          HelperText="Shown to players in the F12 menu. Defaults to the path." />
-                        </MudItem>
-
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudSwitch T="bool" @bind-Value="row.Enabled" Color="Color.Primary" Label="Enabled" />
-                            <MudText Typo="Typo.caption" Style="opacity:.6;">Synced by default. Off makes it opt-in.</MudText>
-                        </MudItem>
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudSwitch T="bool" @bind-Value="row.Optional" Color="Color.Primary" Label="Optional" />
-                            <MudText Typo="Typo.caption" Style="opacity:.6;">Gives players a working checkbox for it.</MudText>
-                        </MudItem>
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudSwitch T="bool" @bind-Value="row.Enforced" Color="Color.Primary" Label="Enforced" />
-                            <MudText Typo="Typo.caption" Style="opacity:.6;">Players get no say and cannot exclude it.</MudText>
-                        </MudItem>
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudSwitch T="bool" @bind-Value="row.Headless" Color="Color.Primary" Label="Send to headless" />
-                            <MudText Typo="Typo.caption" Style="opacity:.6;">Off keeps it away from a Fika headless client.</MudText>
-                        </MudItem>
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudSwitch T="bool" @bind-Value="row.RestartRequired" Color="Color.Primary" Label="Restart required" />
-                            <MudText Typo="Typo.caption" Style="opacity:.6;">Client restarts after this path updates.</MudText>
-                        </MudItem>
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudSwitch T="bool" @bind-Value="row.Silent" Color="Color.Primary" Label="Silent" />
-                            <MudText Typo="Typo.caption" Style="opacity:.6;">Update without prompting the player.</MudText>
-                        </MudItem>
-
-                        <MudItem xs="12">
-                            <StringList Label="Base files"
-                                        Placeholder="../EscapeFromTarkov_Data/Managed/Example.dll"
-                                        Help="Files this mod owns that live outside its own folder."
-                                        Items="row.BaseFiles"
-                                        OnChanged="Revalidate" />
-                        </MudItem>
-                    </MudGrid>
-                </ChildContent>
-            </MudExpansionPanel>
-        }
+            <MudText Typo="Typo.subtitle2">Should a Fika headless get it?</MudText>
+            <MudText Typo="Typo.body2" Style="opacity:.75;">
+                That is a separate list at the bottom, because a headless has no F12 menu to choose with.
+            </MudText>
+        </MudExpansionPanel>
     </MudExpansionPanels>
 
-    <MudDivider Class="mb-6" />
-
-    @foreach (var section in Sections)
+    @if (_warnings.Count > 0)
     {
-        <div class="mb-6">
-            <MudText Typo="Typo.h6" Class="mb-1">@section.Title</MudText>
-            <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.7;">@section.Blurb</MudText>
-            <StringList Label="@section.Title"
-                        Placeholder="@section.Placeholder"
-                        Items="@section.Items(_draft)"
-                        OnChanged="Revalidate" />
-        </div>
+        <MudAlert Severity="Severity.Warning" Class="mb-6">
+            @foreach (var warning in _warnings)
+            {
+                <MudText Typo="Typo.body2">
+                    @if (!string.IsNullOrEmpty(warning.Path))
+                    {
+                        <code>@warning.Path</code>
+                        <text> - </text>
+                    }
+                    @warning.Message
+                </MudText>
+            }
+        </MudAlert>
     }
+
+    @* ---------------- 1. everyone ---------------- *@
+    <MudStack Row="true" AlignItems="AlignItems.Baseline" Spacing="2">
+        <MudText Typo="Typo.h6">Everyone gets these</MudText>
+        <MudText Typo="Typo.caption" Style="opacity:.6;">@SharedCatchAlls of 3 folders</MudText>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.7;">
+        Your whole client modset goes to every player who connects. Leave all three on unless you keep
+        something in one of them that players must never receive.
+    </MudText>
+
+    <MudPaper Outlined="true" Class="mb-6">
+        @foreach (var path in ConfigEditorService.CatchAlls)
+        {
+            var row = _draft.SyncPaths.Find(r => ConfigEditorService.IsCatchAll(r.Path)
+                                                 && r.Path.Replace('\\', '/') == path);
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="pa-3" Spacing="2">
+                <div style="flex:1;min-width:0;">
+                    <MudText Typo="Typo.body1"><code>@path</code></MudText>
+                    <MudText Typo="Typo.caption" Style="opacity:.6;">@EntryCount(path)</MudText>
+                </div>
+                <MudSwitch T="bool" Color="Color.Primary"
+                           Value="@(row is not null)"
+                           ValueChanged="@(on => ToggleCatchAll(path, on))" />
+            </MudStack>
+            <MudDivider />
+        }
+
+        <MudExpansionPanels Elevation="0">
+            <MudExpansionPanel Text="@($"Never send these ({_draft.Exclusions.Count})")">
+                <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.75;">
+                    Files inside those folders that must not go out. ModSync ships the first few - they
+                    guard SPT's own client files. Add your own below.
+                </MudText>
+                <StringList Label="Exclusions" Placeholder="**/.git"
+                            Items="_draft.Exclusions" OnChanged="Revalidate" />
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+    </MudPaper>
+
+    @* ---------------- 2. curated ---------------- *@
+    <MudStack Row="true" AlignItems="AlignItems.Baseline" Spacing="2">
+        <MudText Typo="Typo.h6">Let players choose</MudText>
+        <MudText Typo="Typo.caption" Style="opacity:.6;">
+            @(_curated.Count == 0 ? "none yet" : $"{_curated.Count} mod{(_curated.Count == 1 ? "" : "s")}")
+        </MudText>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.7;">
+        Everything above goes to everyone by default. Put a mod here instead and it becomes a checkbox
+        in the player's F12 menu, so they install it or they do not.
+    </MudText>
+
+    <MudPaper Outlined="true" Class="mb-6">
+        @if (_curated.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="pa-4" Align="Align.Center" Style="opacity:.6;">
+                Nothing is optional yet, so every player gets every mod.
+            </MudText>
+        }
+
+        @foreach (var mod in _curated)
+        {
+            var lead = mod.Rows[0];
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="pa-3" Spacing="2">
+                <div style="flex:1;min-width:0;">
+                    <MudText Typo="Typo.body1">@mod.Label</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity:.6;"><code>@lead.Path</code></MudText>
+                </div>
+
+                @* One control, and it is the only thing about a curated mod a player can tell apart:
+                   whether their checkbox arrives ticked. `optional:true` and `enabled:false` are the
+                   two minimal spellings of that, which SetStart writes for us. *@
+                <MudSelect T="bool" Value="@lead.Enabled" Dense="true" Margin="Margin.Dense"
+                           Style="max-width:190px;"
+                           ValueChanged="@(v => SetStart(mod, v))">
+                    <MudSelectItem T="bool" Value="false">starts unticked</MudSelectItem>
+                    <MudSelectItem T="bool" Value="true">starts ticked</MudSelectItem>
+                </MudSelect>
+
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                               title="Back to everyone" aria-label="@($"Remove {mod.Label}, back to everyone")"
+                               OnClick="@(() => RemoveMod(mod))" />
+            </MudStack>
+
+            @* Extra rows the mod owns - normally its BepInEx config file. Shown as its own line so a
+               wrong guess is visible and one click from gone. *@
+            @foreach (var extra in mod.Rows.Skip(1))
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="pa-3 pl-8" Spacing="2"
+                          Style="background:var(--mud-palette-background-grey);">
+                    <div style="flex:1;min-width:0;">
+                        <MudText Typo="Typo.body2" Style="opacity:.8;">and its config file</MudText>
+                        <MudText Typo="Typo.caption" Style="opacity:.6;"><code>@extra.Path</code></MudText>
+                    </div>
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                   title="Do not include this config file"
+                                   OnClick="@(() => RemoveRow(mod, extra))" />
+                </MudStack>
+            }
+            <MudDivider />
+        }
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="pa-3" Spacing="2" Wrap="Wrap.Wrap">
+            <MudSelect T="string" @bind-Value="_pick" Dense="true" Margin="Margin.Dense"
+                       Placeholder="Choose a mod on your server..." Style="flex:1;min-width:220px;"
+                       Clearable="true">
+                @foreach (var candidate in AvailableMods)
+                {
+                    <MudSelectItem T="string" Value="@candidate.Path">
+                        @candidate.Name (@candidate.Area)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                       Disabled="@string.IsNullOrEmpty(_pick)" OnClick="AddPickedMod">Add</MudButton>
+            <MudButton Variant="Variant.Text" Size="Size.Small"
+                       OnClick="@(() => _showPathEntry = !_showPathEntry)">
+                @(_showPathEntry ? "Never mind" : "Add any path instead")
+            </MudButton>
+        </MudStack>
+
+        @if (_showPathEntry)
+        {
+            <div class="pa-3 pt-0">
+                <MudTextField @bind-Value="_manualPath" Margin="Margin.Dense" Immediate="true"
+                              Placeholder="../BepInEx/plugins/SomeMod" Label="Path" />
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mt-2"
+                           Disabled="@string.IsNullOrWhiteSpace(_manualPath)"
+                           OnClick="AddManualPath">Add path</MudButton>
+
+                @* Not hypothetical: the wiki documents a server-mods recipe, and following it here
+                   would ship config.jsonc - and anything kept beside it - to every connecting client. *@
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                    <b>Careful with server folders.</b> Adding the server's own <code>user/mods</code>
+                    sends your server mods to every player, and that includes this config file and
+                    anything else you keep beside it. Almost nobody wants this.
+                </MudAlert>
+            </div>
+        }
+    </MudPaper>
+
+    @* ---------------- 3. headless ---------------- *@
+    <MudStack Row="true" AlignItems="AlignItems.Baseline" Spacing="2">
+        <MudText Typo="Typo.h6">Headless clients</MudText>
+        <MudText Typo="Typo.caption" Style="opacity:.6;">
+            @_draft.HeadlessIncludes.Count of @_pluginCount plugins
+        </MudText>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.7;">
+        A Fika headless has no F12 menu, so it cannot choose. It gets its own list instead, because
+        plenty of client mods have no business on one - anything that draws a UI, or is tied to a
+        graphics card.
+    </MudText>
+
+    <MudPaper Outlined="true" Class="mb-6 pa-3">
+        @if (_draft.HeadlessIncludes.Count == 0)
+        {
+            @* Fail-closed is deliberate in SyncUtil, so this is a warning about intent, not a bug. *@
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                <b>This list is empty, so a headless gets no plugins at all.</b> That is deliberate on
+                ModSync's part - it fails closed rather than guessing - but it almost certainly is not
+                what you want.
+            </MudAlert>
+        }
+
+        @if (!_editHeadless)
+        {
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-3">
+                @foreach (var include in _draft.HeadlessIncludes.Take(10))
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Leaf(include)</MudChip>
+                }
+                @if (_draft.HeadlessIncludes.Count > 10)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">
+                        +@(_draft.HeadlessIncludes.Count - 10) more
+                    </MudChip>
+                }
+            </MudStack>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                       OnClick="@(() => _editHeadless = true)">Edit this list</MudButton>
+        }
+        else
+        {
+            <MudTextField @bind-Value="_headlessFilter" Margin="Margin.Dense" Immediate="true"
+                          Placeholder="Filter plugins" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" Class="mb-2" />
+
+            <div style="max-height:320px;overflow-y:auto;">
+                @foreach (var plugin in FilteredPlugins)
+                {
+                    <MudCheckBox T="bool" Dense="true" Size="Size.Small"
+                                 Value="@_draft.HeadlessIncludes.Contains(plugin.Path)"
+                                 ValueChanged="@(on => ToggleHeadless(plugin.Path, on))">
+                        @plugin.Name
+                    </MudCheckBox>
+                }
+                @if (FilteredPlugins.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="pa-2" Style="opacity:.6;">Nothing matches.</MudText>
+                }
+            </div>
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2" Spacing="2">
+                <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                           OnClick="@(() => { _editHeadless = false; _headlessFilter = string.Empty; })">Done</MudButton>
+                <MudSpacer />
+                <MudText Typo="Typo.caption" Style="opacity:.6;">
+                    @_draft.HeadlessIncludes.Count selected
+                </MudText>
+            </MudStack>
+        }
+    </MudPaper>
+
+    @* Managed allowlists stay out of the three sections on purpose: they are an EscapeFromTarkov_Data
+       concern rather than a mod, almost always empty, and putting them above would make the common
+       case look more complicated than it is. *@
+    <MudExpansionPanels Elevation="0" Class="mb-6">
+        <MudExpansionPanel Text="Base game files (advanced)">
+            <MudText Typo="Typo.body2" Class="mb-3" Style="opacity:.75;">
+                Allowlists over <code>EscapeFromTarkov_Data/Managed</code>. Nothing there is sent
+                unless it is named here. Most servers leave both empty.
+            </MudText>
+            <StringList Label="Managed includes" Placeholder="Unity.VectorGraphics.dll"
+                        Items="_draft.ManagedIncludes" OnChanged="Revalidate" />
+            <div class="mt-4"></div>
+            <StringList Label="Headless managed includes" Placeholder=""
+                        Items="_draft.HeadlessManagedIncludes" OnChanged="Revalidate" />
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        <b>Changes here are not saved yet.</b> This is the editing surface only - saving, and the login
+        that has to guard it, arrive together in the next step. Edit <code>config.jsonc</code> by hand for now.
+    </MudAlert>
 }
 
 @code {
     private ConfigDraft? _draft;
     private string? _error;
     private IReadOnlyList<ConfigWarning> _warnings = [];
+    private List<CuratedMod> _curated = [];
 
-    private record Section(string Title, string Blurb, string Placeholder, Func<ConfigDraft, List<string>> Items);
+    // Read once per visit: the disk does not change while the page is open, and re-scanning on every
+    // keystroke in the filter box would stat the plugins folder for nothing.
+    private List<ClientMod> _installed = [];
+    private List<string> _configFiles = [];
+    private int _pluginCount;
 
-    private static readonly Section[] Sections =
-    [
-        new("Exclusions",
-            "Glob patterns the server never sends, whatever the sync paths say.",
-            "**/.git",
-            d => d.Exclusions),
+    private string? _pick;
+    private string _manualPath = string.Empty;
+    private bool _showPathEntry;
+    private bool _editHeadless;
+    private string _headlessFilter = string.Empty;
 
-        new("Headless includes",
-            "An allowlist: the only BepInEx plugins a Fika headless client receives. Leave empty to send it everything.",
-            "Fika.Headless.dll",
-            d => d.HeadlessIncludes),
+    private int SharedCatchAlls =>
+        _draft is null ? 0 : ConfigEditorService.CatchAlls.Count(p => _draft.SyncPaths.Exists(r => r.Path.Replace('\\', '/') == p));
 
-        new("Managed includes",
-            "An allowlist over EscapeFromTarkov_Data/Managed. Nothing there is sent unless it is named here.",
-            "../Managed/Unity.VectorGraphics.dll",
-            d => d.ManagedIncludes),
+    /// <summary>Installed mods that are not already carved out, so the picker never offers a duplicate.</summary>
+    private IEnumerable<ClientMod> AvailableMods =>
+        _draft is null
+            ? []
+            : _installed.Where(m => !_draft.SyncPaths.Exists(r => r.Path.Replace('\\', '/') == m.Path));
 
-        new("Headless managed includes",
-            "The same allowlist, for headless clients. Usually empty - a headless renders nothing.",
-            "",
-            d => d.HeadlessManagedIncludes),
-    ];
+    private List<ClientMod> FilteredPlugins =>
+        [.. _installed.Where(m => m.Area == "plugins"
+                                  && (string.IsNullOrWhiteSpace(_headlessFilter)
+                                      || m.Name.Contains(_headlessFilter, StringComparison.OrdinalIgnoreCase)))];
+
+    private static string Leaf(string path) => path.Replace('\\', '/').Split('/')[^1];
+
+    private string EntryCount(string path)
+    {
+        var n = ClientModScanner.CountEntries(Directory.GetCurrentDirectory(), path);
+        return n == 0 ? "empty, or not present on this server" : $"{n} entr{(n == 1 ? "y" : "ies")}";
+    }
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
             _draft = await ConfigEditorService.LoadDraftAsync();
-            Revalidate();
+
+            var root = Directory.GetCurrentDirectory();
+            _installed = ClientModScanner.Scan(root);
+            _configFiles = ClientModScanner.ConfigFiles(root);
+            _pluginCount = _installed.Count(m => m.Area == "plugins");
+
+            Refresh();
         }
         catch (Exception ex)
         {
@@ -201,20 +390,114 @@ else
         }
     }
 
-    private void Revalidate()
+    private void Refresh()
     {
-        if (_draft is not null) _warnings = ConfigEditorService.Validate(_draft);
+        if (_draft is null) return;
+        _curated = ConfigEditorService.Curated(_draft);
+        _warnings = ConfigEditorService.Validate(_draft);
     }
 
-    /// <summary>Chips for the options this row actually changes, so a default row shows none.</summary>
-    private static IEnumerable<(string Label, Color Colour)> ChipsFor(SyncPathRow row)
+    private void Revalidate() => Refresh();
+
+    private void ToggleCatchAll(string path, bool on)
     {
-        if (row.Enforced) yield return ("enforced", Color.Error);
-        if (row.Optional) yield return ("optional", Color.Primary);
-        if (!row.Enabled) yield return ("opt-in", Color.Info);
-        if (!row.Headless) yield return ("no headless", Color.Warning);
-        if (row.Silent) yield return ("silent", Color.Default);
-        if (!row.RestartRequired) yield return ("no restart", Color.Default);
-        if (row.BaseFiles.Count > 0) yield return ($"{row.BaseFiles.Count} base file{(row.BaseFiles.Count == 1 ? "" : "s")}", Color.Default);
+        if (_draft is null) return;
+
+        if (on)
+        {
+            // Prepended, not appended: the catch-alls read as the base layer of the file, and the
+            // carve-outs below them. Order has no effect on behaviour - ConfigUtil sorts by path
+            // length - so this is purely so the file still reads the way an admin wrote it.
+            _draft.SyncPaths.Insert(0, new SyncPathRow { Path = path, Name = path });
+        }
+        else
+        {
+            _draft.SyncPaths.RemoveAll(r => r.Path.Replace('\\', '/') == path);
+        }
+
+        Refresh();
+    }
+
+    /// <summary>
+    /// Write the minimal spelling of "starts ticked" across every row the mod owns, so a mod and its
+    /// config file can never disagree about whether the player has it.
+    /// </summary>
+    private void SetStart(CuratedMod mod, bool ticked)
+    {
+        foreach (var row in mod.Rows)
+        {
+            row.Optional = ticked;
+            row.Enabled = ticked;
+        }
+        Refresh();
+    }
+
+    private void RemoveMod(CuratedMod mod)
+    {
+        if (_draft is null) return;
+        foreach (var row in mod.Rows) _draft.SyncPaths.Remove(row);
+        Refresh();
+    }
+
+    private void RemoveRow(CuratedMod mod, SyncPathRow row)
+    {
+        if (_draft is null) return;
+        _draft.SyncPaths.Remove(row);
+        mod.Rows.Remove(row);
+        Refresh();
+    }
+
+    private void AddPickedMod()
+    {
+        if (_draft is null || string.IsNullOrEmpty(_pick)) return;
+
+        var mod = _installed.Find(m => m.Path == _pick);
+        if (mod is null) return;
+
+        AddCurated(mod.Path, mod.Name);
+
+        // Its config file is a guess and only right about two thirds of the time, so it is added as
+        // its own visible row the admin can delete - never folded into the mod silently.
+        var suggested = ClientModScanner.SuggestConfigFile(mod.Name, _configFiles);
+        if (suggested is not null && !_draft.SyncPaths.Exists(r => r.Path.Replace('\\', '/') == suggested))
+            AddCurated(suggested, $"{mod.Name} - config");
+
+        _pick = null;
+        Refresh();
+    }
+
+    private void AddManualPath()
+    {
+        if (_draft is null || string.IsNullOrWhiteSpace(_manualPath)) return;
+
+        var path = _manualPath.Trim().Replace('\\', '/');
+        if (!_draft.SyncPaths.Exists(r => r.Path.Replace('\\', '/') == path))
+            AddCurated(path, ClientModScanner.TrimDll(Leaf(path)));
+
+        _manualPath = string.Empty;
+        Refresh();
+    }
+
+    /// <summary>
+    /// A new carve-out starts unticked - the opt-in shape, and the safe default: a player who does
+    /// nothing ends up with less than before rather than more.
+    /// </summary>
+    private void AddCurated(string path, string name) =>
+        _draft?.SyncPaths.Add(new SyncPathRow { Path = path, Name = name, Enabled = false });
+
+    private void ToggleHeadless(string path, bool on)
+    {
+        if (_draft is null) return;
+
+        if (on)
+        {
+            if (!_draft.HeadlessIncludes.Contains(path)) _draft.HeadlessIncludes.Add(path);
+        }
+        else
+        {
+            _draft.HeadlessIncludes.Remove(path);
+        }
+
+        Refresh();
     }
 }

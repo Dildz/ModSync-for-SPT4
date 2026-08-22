@@ -103,6 +103,14 @@ jobs:
           Copy-Item "ModSync.Server/bin/Release/ModSync.Server/ModSync.Server.dll" "$stage/SPT_Runtime/user/mods/Corter-ModSync/"
           # (config.jsonc intentionally not staged - see the layout note above)
 
+          # Markdig renders the in-server documentation pages. This is NOT optional: a class library
+          # does not copy its NuGet dependencies to the output folder on its own, which is why the
+          # csproj sets CopyLocalLockFileAssemblies - and if the DLL is missing from the zip the mod
+          # still loads happily and then throws FileNotFoundException the first time anyone opens
+          # /modsync. Staged by name rather than a wildcard so a new dependency has to be added here
+          # deliberately instead of being swept in unnoticed.
+          Copy-Item "ModSync.Server/bin/Release/ModSync.Server/Markdig.dll" "$stage/SPT_Runtime/user/mods/Corter-ModSync/"
+
           # Updater - single-file output from the publish step above. Just the .exe
           # (~1.6MB) with Newtonsoft.Json, deps.json, and runtimeconfig.json all bundled in.
           Copy-Item "ModSync.Updater/bin/Release/net10.0-windows/win-x64/publish/ModSync.Updater.exe" "$stage/"
