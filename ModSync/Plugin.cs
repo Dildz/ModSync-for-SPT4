@@ -857,6 +857,23 @@ public class Plugin : BaseUnityPlugin
         server = new Server(Info.Metadata.Version);
 
         configDeleteRemovedFiles = Config.Bind("General", "Delete Removed Files", true, "Should the mod delete files that have been removed from the server?");
+
+        // Headless only, and a no-op on a player install (gated on HeadlessConfig.json).
+        //
+        // SPT 4.1.3 moved bundle acquisition into the launcher, which a headless never runs, so
+        // without this every server-mod bundle is reported missing and the client stalls before
+        // Fika.Headless starts.
+        //
+        // Deliberately SYNCHRONOUS and deliberately here, after two placements that did not work:
+        //   * inside StartPlugin()'s coroutine - correct capability, wrong order. A coroutine
+        //     yields to the game loop, so SPT reached /singleplayer/bundles ~60 log lines before
+        //     the download finished.
+        //   * in ModSync.Patcher (preloader) - correct order, no capability. Mono has no TLS
+        //     provider that early: "TLS Support not available" on every HTTPS attempt.
+        // Awake() is both: chainloader time, so TLS works, and blocking, so the game cannot get
+        // ahead of us. On a headless there is no UI to freeze, which is what makes that acceptable.
+        if (IsHeadless)
+            HeadlessBundles.Acquire(Directory.GetCurrentDirectory(), Logger.LogInfo, Logger.LogWarning);
     }
 
     // These three drive what the update window DRAWS, so they must span the same set the diff

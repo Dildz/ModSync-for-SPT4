@@ -24,6 +24,9 @@
 
     <ItemGroup>
       <ProjectReference Include="..\ModSync\ModSync.csproj" />
+      <!-- Crc32 lives in ModSync.Utility but is linked only into ModSync.Patcher, so link it
+           here too rather than pulling the whole shared project into the test assembly. -->
+      <Compile Include="..\ModSync.Utility\Crc32.cs" />
     </ItemGroup>
 
     <!--
