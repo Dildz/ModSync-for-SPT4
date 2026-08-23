@@ -141,15 +141,48 @@ jobs:
 
             ## Changes
 
-            This brings the 4.1 line level with v0.12.7 on the 4.0 line, plus one fix that only affects 4.1.
+            This is the first full release since v0.13.0. It carries everything from the v0.13.1-pre1 pre-release plus new support for headless clients on SPT 4.1.3.
 
-            - **Fixed: paths inside the server folder were advertised as `SPT\...` on 4.1.** SPT 4.1 renamed its server folder to `SPT_Runtime/`, but ModSync still told clients that a syncPath like `user/mods` lived under `SPT\`. Nothing failed loudly - hashes matched and downloads worked - the files simply landed in `<gameRoot>/SPT/`, a folder 4.1 doesn't have. The folder name is now read from the server itself rather than hardcoded, so it is correct on both lines and survives any future rename.
-            - **New: `optional` per syncPath.** Set `"optional": true` and the client gets a working checkbox for that path in the F12 menu, starting in whatever state `enabled` gives it. Until now the only path a player could tick or untick was an opt-IN one (`"enabled": false`); this adds the other half, a mod that is **synced by default but can still be refused**. Unticking uninstalls what ModSync installed there.
-              Do not put it on the three catch-alls (`../BepInEx/plugins`, `patchers`, `config`) - they carry the mods your players need to connect, so one untick would strip the modset.
-            - **New: removing a mod from your config now removes it from clients.** Delete a mod's files from the server *and* delete its `syncPaths` entry, and every client uninstalls its copy on the next sync, with the usual prompt. Previously the entry disappearing meant clients never heard about it again and kept the mod permanently.
-              ModSync records what it served in `.modsync-served.json` next to `config.jsonc`, and keeps offering a removed entry as empty until you re-add it or clear that file. Deleting the entry but **keeping** the files still does the opposite, by design: the entry is what carves a mod out of the catch-alls, so without it they sync it to everyone.
-            - **Fixed: renaming a syncPath no longer resets your players' F12 choices.** Each client stored its toggles under the syncPath's `name`, so relabelling an entry made every player's setting for that mod revert to default and left a dead line in their config. Toggles are now stored under the `path` and merely *displayed* using the name. Each client carries its existing choices over on the first launch and tidies the old lines away; nobody has to do anything.
-              This mattered more once `optional` existed: a reset re-ticks an opt-out path, which would have silently reinstalled a mod the player had refused.
+            ### Headless clients can get their asset bundles on SPT 4.1.3
+
+            SPT 4.1.3 moved bundle downloading out of the game client and into the launcher. **A Fika headless never runs the launcher**, so on 4.1.3 it cannot obtain a single server-mod bundle. Every bundle-shipping mod fails with `N of N mod bundles were found in neither the bundle cache nor a mod folder`, and the client stalls before `Fika.Headless` starts.
+
+            ModSync now fetches them itself on a headless, before the game loads them. Bundles are CRC-verified and cached, so this happens once.
+
+            **If your headless shares a machine with your server, do this instead - it is far faster.** SPT still falls back to reading a bundle out of its mod folder when the cache misses, so you can simply show the headless your server's mods:
+
+            ```yaml
+            # headless service
+            volumes:
+              - ../headless:/opt/tarkov
+              - ../server/SPT_Runtime/user/mods:/opt/tarkov/SPT_Runtime/user/mods:ro
+            ```
+
+            Nothing is copied and no extra disk is used. ModSync then sees that every bundle is already reachable and downloads nothing - a 7 GB modset goes from a ~50 minute first boot to about two minutes. Without the mount, ModSync downloads them, which works everywhere but is limited to roughly 2-3 MB/s by Unity's Mono HTTP stack. Either way you end up with a working headless.
+
+            *Only relevant if you run a headless. Player clients are unaffected - their launcher does this already.*
+
+            ### Fixed: paths inside the server folder were advertised as `SPT\...` on 4.1
+
+            SPT 4.1 renamed its server folder to `SPT_Runtime/`, but ModSync still told clients that a syncPath like `user/mods` lived under `SPT\`. Nothing failed loudly - hashes matched and downloads worked - the files simply landed in `<gameRoot>/SPT/`, a folder 4.1 doesn't have. The folder name is now read from the server itself rather than hardcoded, so it is correct on both lines and survives any future rename.
+
+            ### New: `optional` per syncPath
+
+            Set `"optional": true` and the client gets a working checkbox for that path in the F12 menu, starting in whatever state `enabled` gives it. Until now the only path a player could tick or untick was an opt-IN one (`"enabled": false`); this adds the other half, a mod that is **synced by default but can still be refused**. Unticking uninstalls what ModSync installed there.
+
+            Do not put it on the three catch-alls (`../BepInEx/plugins`, `patchers`, `config`) - they carry the mods your players need to connect, so one untick would strip the modset.
+
+            ### New: removing a mod from your config now removes it from clients
+
+            Delete a mod's files from the server *and* delete its `syncPaths` entry, and every client uninstalls its copy on the next sync, with the usual prompt. Previously the entry disappearing meant clients never heard about it again and kept the mod permanently.
+
+            ModSync records what it served in `.modsync-served.json` next to `config.jsonc`, and keeps offering a removed entry as empty until you re-add it or clear that file. Deleting the entry but **keeping** the files still does the opposite, by design: the entry is what carves a mod out of the catch-alls, so without it they sync it to everyone.
+
+            ### Fixed: renaming a syncPath no longer resets your players' F12 choices
+
+            Each client stored its toggles under the syncPath's `name`, so relabelling an entry made every player's setting for that mod revert to default and left a dead line in their config. Toggles are now stored under the `path` and merely *displayed* using the name. Each client carries its existing choices over on the first launch and tidies the old lines away; nobody has to do anything.
+
+            This mattered more once `optional` existed: a reset re-ticks an opt-out path, which would have silently reinstalled a mod the player had refused.
 
             ## Upgrade notes
 
@@ -157,15 +190,17 @@ jobs:
 
             Your existing `config.jsonc` is untouched and behaves exactly as before; `optional` defaults to false.
 
+            **Headless operators on 4.1.3:** the first boot after updating will fetch any bundles your server mods ship, and the headless stays silent until that finishes - progress is logged per bundle. Add the mount shown above to skip it entirely.
+
             **If you had a syncPath without a `../` prefix** (`user/mods` and the like), your players have a stray `<gameRoot>/SPT/` folder holding the old copy. ModSync now serves that path to the correct place and stops tracking the old one, so the leftovers are inert but will not be cleaned up automatically - delete that `SPT/` folder on each client once everyone has updated.
 
             **If you already have an entry you expected players to be able to untick,** it needs `"optional": true` adding. An `"enabled": true` path has never been shown in the F12 menu, and still isn't without that option.
 
             ## Testing status
 
-            The three features above were tested on the 4.0 line through the v0.12.7 pre-releases, on live servers with headless and player clients, before being ported here unchanged. Both test suites are green in CI.
+            The four items carried over from v0.13.1-pre1 were tested on the 4.0 line through the v0.12.7 pre-releases, on live servers with headless and player clients, before being ported here unchanged.
 
-            The `SPT_Runtime` path fix is new in this release and specific to 4.1. If you serve a syncPath that lives inside the server folder, that is the part worth watching - please open an issue if anything lands somewhere unexpected.
+            Bundle acquisition is new in this release. It was tested on a live SPT 4.1.3 stack with a 1214-bundle / 7 GB modset, both ways: with the mount present (every bundle resolved from the mod folder, nothing downloaded) and with bundles deliberately hidden from it (fetched, CRC-verified and cached). Both test suites are green in CI.
 
             ## Docs
 
