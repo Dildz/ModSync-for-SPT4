@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using ModSync.Utility;
 // Alias: SPT.Custom.Utils also declares a Crc32. It resolves against the 4.1.1 reference
 // assemblies at COMPILE time but is ABSENT at RUNTIME on 4.1.3 - binding to it is exactly the
@@ -57,7 +60,31 @@ namespace ModSync;
 public static class HeadlessBundles
 {
     /// <summary>Must match BundleManager.GetBundleFilePath exactly, or SPT will not look here.</summary>
+    private const string RuntimeRelative = "SPT_Runtime";
     private const string CacheRelative = @"SPT_Runtime\user\cache\bundles";
+
+    /// <summary>
+    /// How many bundles to fetch at once.
+    ///
+    /// Measured on a LAN headless: one stream sustained 1.2 MB/s while plain curl over the same
+    /// hop managed 200 MB/s, so the ceiling is per-stream CPU inside Wine/Mono (TLS, then the
+    /// CRC pass), not the wire. Independent streams therefore scale across idle cores.
+    ///
+    /// Kept deliberately low. Plugin.cs cut ModSync's own file-sync limiter from 8 to 2 after
+    /// Mono's TLS stack proved fragile under heavy concurrency on slow uplinks - handshakes
+    /// timing out into retry storms that never recovered. Unlike that path this one has no retry,
+    /// so a storm here costs a mod's assets outright. 4 is a compromise: a headless is normally
+    /// close to its server, but it is not always.
+    /// </summary>
+    private const int Concurrency = 4;
+
+    /// <summary>
+    /// Read/write chunk for bundle downloads. Stream.CopyTo defaults to 80 KB, which is ~85,000
+    /// file calls across a 6.5 GB first run. Wine translates every Win32 file call, so syscall
+    /// count costs more here than it would on native .NET; 1 MB cuts it to ~6,500.
+    /// At Concurrency 4 this is 4 MB of buffers total.
+    /// </summary>
+    private const int CopyBufferSize = 1024 * 1024;
 
     /// <summary>
     /// Present only on a headless install, and carries the server URL - so one file both
@@ -71,6 +98,7 @@ public static class HeadlessBundles
     {
         [JsonProperty("FileName")] public string FileName { get; set; }
         [JsonProperty("Crc")] public uint Crc { get; set; }
+        [JsonProperty("ModPath")] public string ModPath { get; set; }
         [JsonProperty("Size")] public long Size { get; set; }
     }
 
@@ -101,7 +129,7 @@ public static class HeadlessBundles
             var missing = new List<ManifestEntry>();
             foreach (var entry in manifest)
             {
-                if (!IsCached(cacheRoot, entry))
+                if (!IsCached(gameDir, cacheRoot, entry))
                     missing.Add(entry);
             }
 
@@ -124,26 +152,43 @@ public static class HeadlessBundles
             var started = DateTime.UtcNow;
             var got = 0;
             var doneBytes = 0L;
+            var finished = 0;
 
-            for (var i = 0; i < missing.Count; i++)
+            // .NET Framework caps outbound connections PER ENDPOINT at 2 by default, so without
+            // this the parallel loop below quietly serialises into pairs.
+            //
+            // Raising DefaultConnectionLimit alone is NOT enough, and failing to notice that cost
+            // a whole test run: the default is only read when a ServicePoint is first CREATED,
+            // and FetchManifest above has already created the one for this host. Setting it
+            // afterwards leaves that instance pinned at 2 - measured as never more than 2 bundles
+            // in flight, with container CPU flat. FindServicePoint returns that same live
+            // instance, so set the limit on it directly and stay order-independent.
+            ServicePointManager.DefaultConnectionLimit = Math.Max(ServicePointManager.DefaultConnectionLimit, Concurrency);
+            ServicePointManager.FindServicePoint(new Uri(backendUrl)).ConnectionLimit = Concurrency;
+
+            Parallel.ForEach(missing, new ParallelOptions { MaxDegreeOfParallelism = Concurrency }, entry =>
             {
-                var entry = missing[i];
                 try
                 {
                     Download(backendUrl, cacheRoot, entry);
-                    got++;
-                    doneBytes += entry.Size;
+
+                    Interlocked.Increment(ref got);
+                    var bytes = Interlocked.Add(ref doneBytes, entry.Size);
+                    var n = Interlocked.Increment(ref finished);
 
                     // Name the file rather than only a counter: when one is slow or stalls, the
                     // admin needs to know WHICH, and bundle sizes vary by an order of magnitude.
-                    log($"Bundles: [{i + 1}/{missing.Count}] {ShortName(entry.FileName)} ({Mb(entry.Size)}) - {Mb(doneBytes)}/{Mb(totalBytes)} done");
+                    // With Concurrency > 1 these complete out of order, so [n] counts finished
+                    // bundles rather than a position in the list.
+                    log($"Bundles: [{n}/{missing.Count}] {ShortName(entry.FileName)} ({Mb(entry.Size)}) - {Mb(bytes)}/{Mb(totalBytes)} done");
                 }
                 catch (Exception e)
                 {
                     // One bad bundle costs that mod's assets, not the boot.
-                    warn($"Bundles: [{i + 1}/{missing.Count}] FAILED {entry.FileName} - {e.Message}");
+                    var n = Interlocked.Increment(ref finished);
+                    warn($"Bundles: [{n}/{missing.Count}] FAILED {entry.FileName} - {e.Message}");
                 }
-            }
+            });
 
             var elapsed = DateTime.UtcNow - started;
             log($"Bundles: {got}/{missing.Count} fetched ({Mb(doneBytes)}) in {elapsed.TotalSeconds:F1}s.");
@@ -225,28 +270,72 @@ public static class HeadlessBundles
         Path.Combine(cacheRoot, entry.Crc.ToString("X8"), entry.FileName.Replace('/', '\\'));
 
     /// <summary>
-    /// Cached means present AND correct. The path is CRC-keyed, so a mismatch indicates a
-    /// truncated or corrupt earlier download rather than a stale version - refetch it.
-    /// Size is checked first because it is free and rules out the common truncation case.
+    /// Cached means present, at the CRC-keyed path, and the size the manifest expects.
+    ///
+    /// This deliberately does NOT re-CRC the file. It used to, and that cost a full read of the
+    /// entire cache on EVERY boot - roughly 7 GB through Mono once the cache is populated, paid
+    /// again on each of the restarts ModSync itself triggers. The check bought very little for
+    /// that price: a file only reaches this path via Download, which CRC-verifies it while
+    /// writing and moves it into place from .part only on success, so anything here was correct
+    /// when written. Re-hashing guards solely against later disk corruption, and SPT's own
+    /// launcher populates this same cache and never re-verifies it either - so trusting it
+    /// matches platform behaviour rather than weakening it.
+    ///
+    /// Size still catches the realistic failure (a truncated file from a killed process). Where
+    /// the manifest omits a size we have nothing cheap to check, so fall back to the CRC.
     /// </summary>
-    private static bool IsCached(string cacheRoot, ManifestEntry entry)
+    private static bool IsCached(string gameDir, string cacheRoot, ManifestEntry entry)
     {
-        var path = LongPath.Extended(CachePathFor(cacheRoot, entry));
-        if (!File.Exists(path))
+        // Mirror SPT's own lookup order: CRC cache first, then the mod folder.
+        if (Usable(CachePathFor(cacheRoot, entry), entry))
+            return true;
+
+        // A headless that shares a filesystem with its server already has every bundle on disk.
+        // Bind-mounting the server's user/mods into the headless is the obvious way to arrange
+        // that, and SPT 4.1.3 still falls back to SPT_Runtime/<ModPath>/bundles/<FileName> when
+        // the cache misses - the "found in neither the bundle cache nor a mod folder" error
+        // names both paths. Downloading a second copy of a file the game will happily read in
+        // place is pure waste, so treat a mod-folder hit as cached and fetch nothing.
+        //
+        // Remote headless setups have no such folder, fall through, and download as before.
+        return !string.IsNullOrEmpty(entry.ModPath) && Usable(ModFolderPathFor(gameDir, entry), entry);
+    }
+
+    /// <summary>
+    /// Present, and the size the manifest expects.
+    ///
+    /// Deliberately does NOT re-CRC. That used to cost a full read of the entire cache on EVERY
+    /// boot - roughly 7 GB through Mono once populated, paid again on each restart ModSync itself
+    /// triggers - and bought very little: a file only reaches the cache path via Download, which
+    /// CRC-verifies while writing and moves from .part only on success. SPT's own launcher fills
+    /// that cache and never re-verifies it either, and nothing verifies the mod folder at all, so
+    /// trusting both matches platform behaviour rather than weakening it.
+    ///
+    /// Size still catches the realistic failure, a truncated file from a killed process. Where
+    /// the manifest omits a size there is nothing cheap to check, so fall back to the CRC.
+    /// </summary>
+    private static bool Usable(string path, ManifestEntry entry)
+    {
+        var full = LongPath.Extended(path);
+        if (!File.Exists(full))
             return false;
 
         try
         {
-            if (entry.Size > 0 && new FileInfo(path).Length != entry.Size)
-                return false;
+            if (entry.Size > 0)
+                return new FileInfo(full).Length == entry.Size;
 
-            return ModSyncCrc32.ComputeFile(path) == entry.Crc;
+            return ModSyncCrc32.ComputeFile(full) == entry.Crc;
         }
         catch
         {
             return false;
         }
     }
+
+    /// <summary>SPT's fallback location: SPT_Runtime/&lt;ModPath&gt;/bundles/&lt;FileName&gt;.</summary>
+    private static string ModFolderPathFor(string gameDir, ManifestEntry entry) =>
+        Path.Combine(gameDir, RuntimeRelative, entry.ModPath.Replace('/', '\\'), "bundles", entry.FileName.Replace('/', '\\'));
 
     /// <summary>
     /// Fetch to a temp file, verify, then move into place.
@@ -267,15 +356,26 @@ public static class HeadlessBundles
         // bundle names survive the URL intact.
         var encoded = string.Join("/", Array.ConvertAll(entry.FileName.Replace('\\', '/').Split('/'), Uri.EscapeDataString));
 
+        var crc = 0xFFFFFFFFu;
         using (var response = Http.GetAsync($"{backendUrl}/files/bundle/{encoded}", HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult())
         {
             response.EnsureSuccessStatusCode();
             using var src = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
             using var dst = new FileStream(LongPath.Extended(tempPath), FileMode.Create);
-            src.CopyTo(dst);
+
+            // Hash on the way past instead of re-reading the finished file. ComputeFile meant a
+            // second full read of every bundle - a whole extra ~6.5 GB of I/O across a first run -
+            // for a value we already have the bytes for.
+            var buffer = new byte[CopyBufferSize];
+            int read;
+            while ((read = src.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                dst.Write(buffer, 0, read);
+                crc = ModSyncCrc32.Compute(buffer, 0, read, crc);
+            }
         }
 
-        var actual = ModSyncCrc32.ComputeFile(LongPath.Extended(tempPath));
+        var actual = crc ^ 0xFFFFFFFFu;
         if (actual != entry.Crc)
         {
             TryDelete(tempPath);
